@@ -216,7 +216,7 @@ app.get("/cola", (req, res) => {
         empty.style.display = 'none';
 
         // Muestra los primeros 15 (ajusta si quieres)
-        data.queue.slice(0, 5).forEach((u, i) => {
+        data.queue.slice(0, 10).forEach((u, i) => {
           const li = document.createElement('li');
           // nickname si existe, si no uniqueId
           const name = (u.nickname || u.uniqueId || 'usuario').toString();
