@@ -315,5 +315,141 @@ app.all("/salir", (req, res) => {
   });
 });
 
+app.all("/api/remove", (req, res) => {
+  const uniqueId = String(req.query.uniqueId || "").trim();
+
+  if (!uniqueId) {
+    return res.status(400).json({ ok: false, error: "missing uniqueId" });
+  }
+
+  const queue = loadQueue();
+  const idx = queue.findIndex(
+    u => String(u.uniqueId).toLowerCase() === uniqueId.toLowerCase()
+  );
+
+  if (idx === -1) {
+    return res.json({ ok: true, status: "not_found", size: queue.length });
+  }
+
+  const removed = queue.splice(idx, 1)[0];
+  saveQueue(queue);
+
+  return res.json({ ok: true, status: "removed", removed, size: queue.length });
+});
+
+app.get("/admin", (req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+
+  res.end(`<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Cola</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 16px; background: #0b0b0b; color: #fff; }
+    .wrap { max-width: 560px; margin: 0 auto; }
+    .card { background: #141414; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; }
+    h1 { font-size: 18px; margin: 0 0 10px; }
+    .meta { font-size: 12px; opacity: .8; margin-bottom: 10px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+    button { cursor: pointer; border: 0; border-radius: 10px; padding: 8px 10px; font-weight: 600; }
+    .btn { background: #2a2a2a; color: #fff; }
+    .btn:hover { background: #3a3a3a; }
+    .danger { background: #b91c1c; color: #fff; }
+    .danger:hover { background: #dc2626; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { display:flex; align-items:center; justify-content:space-between; gap:10px; padding: 10px 0; border-bottom: 1px solid #222; }
+    .left { display:flex; flex-direction:column; gap:2px; }
+    .name { font-size: 16px; }
+    .sub { font-size: 12px; opacity:.8; }
+    .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background:#1f2937; display:inline-block; margin-left:6px; }
+    .pill.sub { background:#065f46; }
+    .rowbtns { display:flex; gap:8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>🛠️ Admin Cola</h1>
+      <div class="meta">
+        <div id="meta">Cargando…</div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" id="refresh">Refrescar</button>
+          <button class="danger" id="clear">Limpiar todo</button>
+        </div>
+      </div>
+
+      <ul id="list"></ul>
+      <div id="empty" style="opacity:.85; display:none; padding: 10px 0;">No hay nadie en la cola.</div>
+    </div>
+  </div>
+
+<script>
+  const listEl = document.getElementById('list');
+  const metaEl = document.getElementById('meta');
+  const emptyEl = document.getElementById('empty');
+
+  async function loadQueue() {
+    const res = await fetch('/api/cola', { cache: 'no-store' });
+    return await res.json();
+  }
+
+  function esc(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+  async function render() {
+    const data = await loadQueue();
+    const q = data.queue || [];
+    const now = new Date();
+    metaEl.textContent = 'Actualizado: ' + now.toLocaleTimeString() + ' | En cola: ' + q.length;
+
+    listEl.innerHTML = '';
+    if (!q.length) { emptyEl.style.display = 'block'; return; }
+    emptyEl.style.display = 'none';
+
+    q.forEach((u, i) => {
+      const uid = u.uniqueId || '';
+      const name = u.nickname || uid || 'usuario';
+      const isSub = u.isSub === true;
+
+      const li = document.createElement('li');
+      li.innerHTML = \`
+        <div class="left">
+          <div class="name">#\${i+1} \${esc(name)} \${isSub ? '<span class="pill sub">SUB</span>' : ''}</div>
+          <div class="sub">@\${esc(uid)}</div>
+        </div>
+        <div class="rowbtns">
+          <button class="danger" data-uid="\${esc(uid)}">Eliminar</button>
+        </div>
+      \`;
+
+      li.querySelector('button.danger').addEventListener('click', async (e) => {
+        const id = e.currentTarget.getAttribute('data-uid');
+        if (!id) return;
+
+        if (!confirm('¿Eliminar a @' + id + ' de la cola?')) return;
+
+        await fetch('/api/remove?uniqueId=' + encodeURIComponent(id), { method: 'POST' });
+        await render();
+      });
+
+      listEl.appendChild(li);
+    });
+  }
+
+  document.getElementById('refresh').addEventListener('click', render);
+
+  document.getElementById('clear').addEventListener('click', async () => {
+    if (!confirm('¿Seguro que quieres limpiar TODA la cola?')) return;
+    await fetch('/limpiar', { method: 'POST' });
+    await render();
+  });
+
+  render();
+  setInterval(render, 10000); // refresco cada 10s (ajústalo si quieres)
+</script>
+</body>
+</html>`);
+});
+
 const PORT = 5005;
 app.listen(PORT, () => console.log(`TikQueue server running on http://127.0.0.1:${PORT}`));
