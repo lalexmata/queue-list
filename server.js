@@ -194,7 +194,7 @@ app.get("/cola", (req, res) => {
     <p>${callToAction}</p>
     <div class="meta" id="meta">Cargando...</div>
     <ol id="list"></ol>
-    <div class="empty" id="empty" style="display:none;">No hay nadie en espera por jugar. Canjea <b>!Juega conmigo</b></div>
+    <div class="empty" id="empty" style="display:none;">No hay nadie en espera por jugar. </b></div>
   </div>
 
   <script>
