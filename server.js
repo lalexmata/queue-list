@@ -1,13 +1,21 @@
 const express = require("express");
+const livereload = require('livereload');
+const connectLivereload = require('connect-livereload');
 const fs = require("fs");
 const path = require("path");
 
 const app = express();
+// start livereload server and watch the public folder
+const lrserver = livereload.createServer();
+lrserver.watch(__dirname + '/public');
 app.use(express.json());
 
+app.use(connectLivereload());
+app.use(express.static('public'));
 const DATA_DIR = path.join(__dirname, "data");
 const QUEUE_FILE = path.join(DATA_DIR, "queue.json");
 const CSV_FILE = path.join(DATA_DIR, "queue.csv");
+
 
 function ensureFiles() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -42,59 +50,269 @@ app.use((req, _res, next) => {
 // Endpoint para !jugar
 app.all("/jugar", (req, res) => {
   const uniqueId =
-    (req.body && (req.body.uniqueId || req.body.user || req.body.username)) ||
+    (req.body && (req.body.uniqueId || req.body.uniqueid || req.body.user || req.body.username)) ||
     req.query.uniqueId ||
+    req.query.uniqueid ||
     req.query.user ||
     req.query.username ||
-    req.query.uniqueid || // por si viene en minúsculas
     "";
 
   const nickname =
-    (req.body && (req.body.nickname || req.body.displayName)) ||
+    (req.body && (req.body.nickname || req.body.displayName || req.body.name)) ||
     req.query.nickname ||
     req.query.displayName ||
     req.query.name ||
     uniqueId;
 
-  // Si TikFinity no manda usuario en "Test", igual guardamos un registro de prueba
-  const finalId = String(uniqueId || `test_${Date.now()}`).trim();
-  const finalNick = String(nickname || finalId).trim();
+  const isSubRaw =
+    (req.body && (req.body.isSub ?? req.body.issub)) ??
+    (req.query.isSub ?? req.query.issub);
 
-  const queue = loadQueue();
-  const already = queue.findIndex(u => u.uniqueId.toLowerCase() === finalId.toLowerCase());
+  const isSub =
+    isSubRaw === true ||
+    String(isSubRaw).toLowerCase() === "true" ||
+    String(isSubRaw) === "1";
 
-  if (already === -1) {
-    queue.push({ uniqueId: finalId, nickname: finalNick, ts: new Date().toISOString() });
-    saveQueue(queue);
-    return res.json({ ok: true, status: "added", pos: queue.length, note: uniqueId ? "from_user" : "no_user_received" });
+  // Evitar basura tipo "{var}" o "%var%"
+  if (!uniqueId || String(uniqueId).includes("{") || String(uniqueId).includes("%")) {
+    return res.status(400).json({ ok: false, error: "invalid uniqueId" });
   }
 
-  return res.json({ ok: true, status: "already_in_queue", pos: already + 1 });
+  const queue = loadQueue();
+
+  const userObj = {
+    uniqueId: String(uniqueId),
+    nickname: String(nickname || uniqueId),
+    ts: new Date().toISOString(),
+    isSub: Boolean(isSub)
+  };
+
+  const sameIdx = queue.findIndex(
+    u => String(u.uniqueId).toLowerCase() === String(uniqueId).toLowerCase()
+  );
+
+  // Si ya existe en cola:
+  if (sameIdx !== -1) {
+    // Si es sub y NO hay sub en el puesto 1, lo movemos a 1
+    const firstIsSub = queue[0]?.isSub === true;
+
+    if (isSub && !firstIsSub && sameIdx !== 0) {
+      queue.splice(sameIdx, 1);
+      queue.unshift({ ...queue[0], ...userObj }); // mantiene estructura, actualiza isSub/ts/nickname
+      saveQueue(queue);
+      return res.json({ ok: true, status: "moved_to_front", pos: 1, size: queue.length });
+    }
+
+    // Si ya hay sub primero, NO le quitamos el puesto
+    return res.json({ ok: true, status: "already_in_queue", pos: sameIdx + 1, size: queue.length });
+  }
+
+  // Nuevo: insertar
+  if (isSub) {
+    const firstIsSub = queue[0]?.isSub === true;
+
+    if (!firstIsSub) {
+      // No hay sub primero => este sub entra primero
+      queue.unshift(userObj);
+      saveQueue(queue);
+      return res.json({ ok: true, status: "added_to_front", pos: 1, size: queue.length });
+    }
+
+    // Ya hay sub en el puesto 1 => NO le quitamos el puesto
+    // Opción: ponerlo justo después del primer sub (posición 2)
+    queue.splice(1, 0, userObj);
+    saveQueue(queue);
+    return res.json({ ok: true, status: "added_after_first_sub", pos: 2, size: queue.length });
+  }
+
+  // No sub => al final
+  queue.push(userObj);
+  saveQueue(queue);
+  return res.json({ ok: true, status: "added", pos: queue.length, size: queue.length });
 });
+
+
+
+
 // Endpoint para ver cola
 app.get("/lista", (req, res) => {
   const queue = loadQueue();
   res.json({ ok: true, size: queue.length, queue });
 });
 
+// Endpoint para ver cola solo nombres y posiciones
+app.get("/lista", (req, res) => {
+  const queue = loadQueue();
+  const queueOrdered = queue.map((user, index) => ({ position: index + 1, ...user }));
+  
+  res.json({ ok: true, size: queue.length, queue: queueOrdered });
+});
+
+// ✅ API: devuelve la cola en JSON (para que el HTML la consulte)
+app.get("/api/cola", (req, res) => {
+  const queue = loadQueue();
+  res.json({ ok: true, size: queue.length, queue });
+});
+
+// ✅ HTML: muestra la cola (overlay)
+app.get("/cola", (req, res) => {
+  res.setHeader("ngrok-skip-browser-warning", "1");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+
+  // refresco cada 4 min = 240000 ms
+  const refreshMs = 10000;
+
+  res.end(`<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cola</title>
+
+  <!-- Refresco "hard" del navegador cada 4 min (opcional, lo dejamos) -->
+  <meta http-equiv="refresh" content="10">
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 16px; background: transparent; color: #fff; }
+    .card { background: rgba(0,0,0,0.65); border-radius: 14px; padding: 14px 16px; width: 360px; }
+    h1 { font-size: 18px; margin: 0 0 10px; }
+    .meta { font-size: 12px; opacity: .85; margin-bottom: 10px; }
+    ol { margin: 0; padding-left: 22px; }
+    li { margin: 6px 0; font-size: 16px; }
+    .empty { font-size: 14px; opacity: .9; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎮 Lista de espera por Jugar</h1>
+    <p>Canjea puntos del canal para apuntarte</p>
+    <div class="meta" id="meta">Cargando...</div>
+    <ol id="list"></ol>
+    <div class="empty" id="empty" style="display:none;">No hay nadie en espera por jugar. Canjea <b>!Juega conmigo</b></div>
+  </div>
+
+  <script>
+    const refreshMs = ${refreshMs};
+
+    async function load() {
+      try {
+        const res = await fetch('/api/cola', { cache: 'no-store' });
+        const data = await res.json();
+
+        const list = document.getElementById('list');
+        const meta = document.getElementById('meta');
+        const empty = document.getElementById('empty');
+
+        list.innerHTML = '';
+
+        const now = new Date();
+        meta.textContent = \`Actualizado: \${now.toLocaleTimeString()} | En espera: \${data.size}\`;
+
+        if (!data.queue || data.queue.length === 0) {
+          empty.style.display = 'block';
+          return;
+        }
+
+        empty.style.display = 'none';
+
+        // Muestra los primeros 15 (ajusta si quieres)
+        data.queue.slice(0, 5).forEach((u, i) => {
+          const li = document.createElement('li');
+          // nickname si existe, si no uniqueId
+          const name = (u.nickname || u.uniqueId || 'usuario').toString();
+          li.textContent = \`\${name}\`;
+          list.appendChild(li);
+        });
+      } catch (e) {
+        document.getElementById('meta').textContent = 'Error cargando lista';
+      }
+    }
+
+    load();
+    setInterval(load, refreshMs); // ✅ refresco cada 4 min sin recargar toda la página
+  </script>
+</body>
+</html>`);
+});
+
 // Endpoint para sacar al siguiente
-app.post("/siguiente", (req, res) => {
+app.post("/siguiente", async (req, res) => {
   const queue = loadQueue();
   const next = queue.shift() || null;
+  // dentro de /siguiente (después de obtener next.nickname):
+  await fetch("http://127.0.0.1:7474/DoAction", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    action: { name: "TT - Decir en chat" },   // o usa id si prefieres
+    args: {
+      msg: `🎯 Turno de @${next.nickname} | ¡Tienes 60s para entrar!`
+    }
+  })
+});
   saveQueue(queue);
   res.json({ ok: true, next, size: queue.length });
 });
 
+app.all("/limpiar", (req, res) => {
+  try {
+    // Vaciar la cola
+    saveQueue([]);
+
+    return res.json({
+      ok: true,
+      message: "Cola limpiada correctamente",
+      size: 0
+    });
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      error: "No se pudo limpiar la cola"
+    });
+  }
+});
+
 // Endpoint para salir
-app.post("/salir", (req, res) => {
-  const uniqueId = String(req.body.uniqueId || "").trim();
+app.all("/salir", (req, res) => {
+  // Intenta leer el ID del usuario desde varias claves posibles
+  const uniqueId =
+    (req.body && (req.body.uniqueId || req.body.uniqueid || req.body.user || req.body.username)) ||
+    req.query.uniqueId ||
+    req.query.uniqueid ||
+    req.query.user ||
+    req.query.username ||
+    "";
+
+  if (!uniqueId) {
+    return res.status(400).json({
+      ok: false,
+      error: "missing uniqueId (TikFinity no envió usuario)"
+    });
+  }
+
   const queue = loadQueue();
-  const idx = queue.findIndex(u => u.uniqueId.toLowerCase() === uniqueId.toLowerCase());
-  if (idx === -1) return res.json({ ok: true, status: "not_in_queue", size: queue.length });
+  const idx = queue.findIndex(
+    u => String(u.uniqueId).toLowerCase() === String(uniqueId).toLowerCase()
+  );
+
+  if (idx === -1) {
+    return res.json({
+      ok: true,
+      status: "not_in_queue",
+      uniqueId,
+      size: queue.length
+    });
+  }
 
   const removed = queue.splice(idx, 1)[0];
   saveQueue(queue);
-  res.json({ ok: true, status: "removed", removed, size: queue.length });
+
+  return res.json({
+    ok: true,
+    status: "removed",
+    removed,
+    size: queue.length
+  });
 });
 
 const PORT = 5005;
