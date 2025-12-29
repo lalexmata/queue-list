@@ -156,9 +156,15 @@ app.get("/api/cola", (req, res) => {
 
 // ✅ HTML: muestra la cola (overlay)
 app.get("/cola", (req, res) => {
+  const platform = String(req.query.platform || "").toLowerCase();
+  const callToAction =
+    platform === "tiktok"
+      ? "Escribe <b>!jugar</b> para apuntarte"
+      : "Canjea puntos del canal para apuntarte";
+
   res.setHeader("ngrok-skip-browser-warning", "1");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-
+  
   // refresco cada 4 min = 240000 ms
   const refreshMs = 10000;
 
@@ -174,7 +180,7 @@ app.get("/cola", (req, res) => {
 
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 16px; background: transparent; color: #fff; }
-    .card { background: rgba(0,0,0,0.65); border-radius: 14px; padding: 14px 16px; width: 360px; }
+    .card { background: rgba(0,0,0,0.65); border-radius: 14px; padding: 14px 16px; width: 290px; }
     h1 { font-size: 18px; margin: 0 0 10px; }
     .meta { font-size: 12px; opacity: .85; margin-bottom: 10px; }
     ol { margin: 0; padding-left: 22px; }
@@ -185,7 +191,7 @@ app.get("/cola", (req, res) => {
 <body>
   <div class="card">
     <h1>🎮 Lista de espera por Jugar</h1>
-    <p>Canjea puntos del canal para apuntarte</p>
+    <p>${callToAction}</p>
     <div class="meta" id="meta">Cargando...</div>
     <ol id="list"></ol>
     <div class="empty" id="empty" style="display:none;">No hay nadie en espera por jugar. Canjea <b>!Juega conmigo</b></div>
