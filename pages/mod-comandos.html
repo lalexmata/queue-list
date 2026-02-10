@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Comandos Moderación</title>
+
+  <style>
+    body { margin:0; padding:16px; font-family: Arial, sans-serif; background:#0b0b0b; color:#fff; }
+    .wrap { max-width: 860px; margin: 0 auto; }
+    .card { background:#141414; border:1px solid #222; border-radius:16px; padding:16px; }
+
+    .header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:10px; }
+    .nav { display:flex; gap:8px; flex-wrap:wrap; }
+
+    h1 { margin:0; font-size:18px; }
+
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 12px; }
+    input {
+      flex:1; min-width:220px; padding:10px;
+      border-radius:12px; border:1px solid #2a2a2a;
+      background:#0f0f0f; color:#fff;
+    }
+
+    button, a.btnlink {
+      padding:10px 12px;
+      border:0;
+      border-radius:12px;
+      font-weight:800;
+      cursor:pointer;
+      background:#2a2a2a;
+      color:#fff;
+      text-decoration:none;
+    }
+    button:hover, a.btnlink:hover { background:#3a3a3a; }
+
+    .danger { background:#b91c1c; }
+    .danger:hover { background:#dc2626; }
+
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding:10px; border-bottom:1px solid #222; text-align:left; vertical-align:top; }
+    th { font-size:12px; opacity:.85; }
+
+    .cmd {
+      font-family: ui-monospace, monospace;
+      font-weight:700;
+    }
+
+    .meta {
+      font-size:12px;
+      opacity:.75;
+      margin-bottom:10px;
+      display:flex;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+
+    .toast {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      background: #101010;
+      border: 1px solid #222;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 12px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity .18s ease, transform .18s ease;
+      pointer-events:none;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="wrap">
+  <div class="card">
+
+    <div class="header">
+      <h1>🛡️ Comandos Moderación</h1>
+
+      <div class="nav">
+        <a class="btnlink" href="/admin">🎮 Admin Cola</a>
+        <a class="btnlink" href="#">📄 Otra Página</a>
+        <a class="btnlink" href="#">⚙️ Config</a>
+      </div>
+    </div>
+
+    <div class="meta">
+      <div id="status">Cargando…</div>
+      <button id="refresh">Refrescar</button>
+    </div>
+
+    <div class="row">
+      <input id="command" placeholder="Comando (ej: !limpiar)" />
+      <input id="description" placeholder="Descripción (qué hace)" />
+      <button id="add">Agregar</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:160px">Comando</th>
+          <th>Descripción</th>
+          <th style="width:120px">Acción</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+
+    <div id="empty" style="opacity:.8; padding:10px 0; display:none;">
+      No hay comandos registrados.
+    </div>
+
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  const tbody = document.getElementById('tbody');
+  const statusEl = document.getElementById('status');
+  const emptyEl = document.getElementById('empty');
+  const toastEl = document.getElementById('toast');
+
+  const key = new URLSearchParams(location.search).get('key') || "";
+
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(() => toastEl.classList.remove('show'), 2000);
+  }
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  async function load() {
+    const res = await fetch('/api/comandos-mod', { cache:'no-store' });
+    const data = await res.json();
+    const items = data.items || [];
+
+    statusEl.textContent = "Actualizado: " + new Date().toLocaleTimeString() + " | Total: " + items.length;
+
+    tbody.innerHTML = '';
+    if (!items.length) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    for (const it of items) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="cmd">${esc(it.command)}</td>
+        <td>${esc(it.description)}</td>
+        <td>
+          <button class="danger" data-cmd="${esc(it.command)}">Eliminar</button>
+        </td>
+      `;
+
+      tr.querySelector('button').addEventListener('click', async (e) => {
+        const cmd = e.currentTarget.getAttribute('data-cmd');
+        if (!confirm("¿Eliminar " + cmd + "?")) return;
+
+        await fetch('/api/comandos-mod/delete' + (key ? '?key=' + key : ''), {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ command: cmd })
+        });
+
+        toast("Eliminado.");
+        await load();
+      });
+
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById('add').addEventListener('click', async () => {
+    const command = document.getElementById('command').value.trim();
+    const description = document.getElementById('description').value.trim();
+
+    if (!command || !description) {
+      toast("Completa comando y descripción.");
+      return;
+    }
+
+    await fetch('/api/comandos-mod/add' + (key ? '?key=' + key : ''), {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ command, description })
+    });
+
+    document.getElementById('command').value = '';
+    document.getElementById('description').value = '';
+
+    toast("Comando agregado.");
+    await load();
+  });
+
+  document.getElementById('refresh').addEventListener('click', load);
+
+  load();
+</script>
+
+</body>
+</html>

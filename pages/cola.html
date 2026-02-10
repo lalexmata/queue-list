@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lista de espera</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: transparent;
+      font-family: Arial, sans-serif;
+      color: #fff;
+    }
+
+    .card {
+        background: rgba(0, 0, 0, 0.65);
+        border-radius: 14px;
+        padding: 14px 16px;
+        width: 290px;
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 800;
+      margin: 0 0 10px 0;
+    }
+
+    .subtitle {
+      font-size: 16px;
+      margin: 0 0 14px 0;
+      opacity: .95;
+    }
+
+    .meta {
+      font-size: 12px;
+      opacity: .75;
+      margin: 0 0 10px 0;
+    }
+
+    ol {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 6px 0;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    /* ✅ Pills estilo admin */
+    .pill{
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      margin-left:8px;
+      font-weight:800;
+      line-height: 1;
+      vertical-align: middle;
+    }
+    .pill.broadcaster { background:#7c3aed; } /* morado */
+    .pill.moderator   { background:#2563eb; } /* azul */
+    .pill.vip         { background:#d97706; } /* dorado */
+    .pill.subscriber  { background:#065f46; } /* verde */
+    .pill.viewer      { background:#374151; } /* gris */
+
+    /* Para que el pill se vea “pegadito” bonito */
+    .nameRow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="title">🎮 <span>Lista de espera por Jugar</span></div>
+    <div class="subtitle" id="subtitle">Canjea puntos del canal para apuntarte</div>
+    <div class="meta" id="meta">Actualizado: --:--:-- | En espera: 0</div>
+    <ol id="list"></ol>
+  </div>
+
+<script>
+  const listEl = document.getElementById("list");
+  const metaEl = document.getElementById("meta");
+  const subtitleEl = document.getElementById("subtitle");
+
+  // Texto por plataforma (opcional)
+  const params = new URLSearchParams(location.search);
+  if (params.get("platform") === "tiktok") {
+    subtitleEl.textContent = "Escribe !jugar para apuntarte";
+  } else {
+    subtitleEl.textContent = "Canjea puntos del canal para apuntarte";
+  }
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, m =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])
+    );
+  }
+
+  function getRole(u){
+    // Si tu API ya manda u.role -> usamos eso
+    if (u && u.role) return String(u.role).toLowerCase();
+    // fallback
+    if (u && u.isSub === true) return "subscriber";
+    return "viewer";
+  }
+
+  function pillForRole(role){
+    // role: broadcaster / moderator / vip / subscriber / viewer
+    const map = {
+      broadcaster: { cls: "broadcaster", text: "👑 STREAMER" },
+      moderator:   { cls: "moderator",   text: "🛡 MOD" },
+      vip:         { cls: "vip",         text: "💎 VIP" },
+      subscriber:  { cls: "subscriber",  text: "⭐ SUB" },
+      viewer:      { cls: "viewer",      text: "👤 SEG" }, // seguidor abreviado
+    };
+
+    const item = map[role] || map.viewer;
+    return `<span class="pill ${item.cls}">${item.text}</span>`;
+  }
+
+  async function loadQueue(){
+    const res = await fetch("/api/cola", { cache:"no-store" });
+    return await res.json();
+  }
+
+  async function render(){
+    const data = await loadQueue();
+    const q = data.queue || [];
+
+    metaEl.textContent =
+      "Actualizado: " + new Date().toLocaleTimeString() +
+      " | En espera: " + q.length;
+
+    listEl.innerHTML = "";
+
+    q.forEach((u) => {
+      const uid = u.uniqueId || "";
+      const name = u.nickname || uid || "usuario";
+      const role = getRole(u);
+
+      const li = document.createElement("li");
+      li.innerHTML = `
+        <span class="nameRow">
+          ${esc(name)}
+          ${pillForRole(role)}
+        </span>
+      `;
+      listEl.appendChild(li);
+    });
+  }
+
+  render();
+  setInterval(render, 10000);
+</script>
+</body>
+</html>

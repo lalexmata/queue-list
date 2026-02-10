@@ -3,15 +3,26 @@ const livereload = require('livereload');
 const connectLivereload = require('connect-livereload');
 const fs = require("fs");
 const path = require("path");
-
+const {
+  loadModCommands,
+  addModCommand,
+  deleteModCommand,
+} = require("./helpers/modCommands.helper");
+const { 
+  resolveRole,
+  insertByPriority
+ } = require("./helpers");
 const app = express();
 // start livereload server and watch the public folder
 const lrserver = livereload.createServer();
-lrserver.watch(__dirname + '/public');
+lrserver.watch(__dirname + '/pages');
 app.use(express.json());
 
 app.use(connectLivereload());
-app.use(express.static('public'));
+
+app.use(express.static('pages'));
+// Servir estáticos (opcional)
+app.use(express.static(path.join(__dirname, "pages")));
 const DATA_DIR = path.join(__dirname, "data");
 const QUEUE_FILE = path.join(DATA_DIR, "queue.json");
 const CSV_FILE = path.join(DATA_DIR, "queue.csv");
@@ -64,15 +75,6 @@ app.all("/jugar", (req, res) => {
     req.query.name ||
     uniqueId;
 
-  const isSubRaw =
-    (req.body && (req.body.isSub ?? req.body.issub)) ??
-    (req.query.isSub ?? req.query.issub);
-
-  const isSub =
-    isSubRaw === true ||
-    String(isSubRaw).toLowerCase() === "true" ||
-    String(isSubRaw) === "1";
-
   // Evitar basura tipo "{var}" o "%var%"
   if (!uniqueId || String(uniqueId).includes("{") || String(uniqueId).includes("%")) {
     return res.status(400).json({ ok: false, error: "invalid uniqueId" });
@@ -80,56 +82,52 @@ app.all("/jugar", (req, res) => {
 
   const queue = loadQueue();
 
+  // ✅ Role desde flags (isBroadcaster/isMod/isVip/isSub)
+  const role = resolveRole({ ...req.query, ...(req.body || {}) }, uniqueId);
+
   const userObj = {
     uniqueId: String(uniqueId),
     nickname: String(nickname || uniqueId),
     ts: new Date().toISOString(),
-    isSub: Boolean(isSub)
+    role,
+    isSub: role === "subscriber", // compat
   };
 
   const sameIdx = queue.findIndex(
     u => String(u.uniqueId).toLowerCase() === String(uniqueId).toLowerCase()
   );
 
-  // Si ya existe en cola:
+  // Si ya existe en cola: no duplicar, solo actualiza datos
   if (sameIdx !== -1) {
-    // Si es sub y NO hay sub en el puesto 1, lo movemos a 1
-    const firstIsSub = queue[0]?.isSub === true;
+    queue[sameIdx] = { ...queue[sameIdx], ...userObj };
 
-    if (isSub && !firstIsSub && sameIdx !== 0) {
-      queue.splice(sameIdx, 1);
-      queue.unshift({ ...queue[0], ...userObj }); // mantiene estructura, actualiza isSub/ts/nickname
-      saveQueue(queue);
-      return res.json({ ok: true, status: "moved_to_front", pos: 1, size: queue.length });
-    }
+    // Si su rol cambió (por ejemplo se hizo VIP/SUB), lo recolocamos por prioridad
+    const updated = queue.splice(sameIdx, 1)[0];
+    const newPos = insertByPriority(queue, updated);
 
-    // Si ya hay sub primero, NO le quitamos el puesto
-    return res.json({ ok: true, status: "already_in_queue", pos: sameIdx + 1, size: queue.length });
-  }
-
-  // Nuevo: insertar
-  if (isSub) {
-    const firstIsSub = queue[0]?.isSub === true;
-
-    if (!firstIsSub) {
-      // No hay sub primero => este sub entra primero
-      queue.unshift(userObj);
-      saveQueue(queue);
-      return res.json({ ok: true, status: "added_to_front", pos: 1, size: queue.length });
-    }
-
-    // Ya hay sub en el puesto 1 => NO le quitamos el puesto
-    // Opción: ponerlo justo después del primer sub (posición 2)
-    queue.splice(1, 0, userObj);
     saveQueue(queue);
-    return res.json({ ok: true, status: "added_after_first_sub", pos: 2, size: queue.length });
+    return res.json({
+      ok: true,
+      status: "updated",
+      role,
+      pos: newPos + 1,
+      size: queue.length,
+    });
   }
 
-  // No sub => al final
-  queue.push(userObj);
+  // Nuevo: insertar por prioridad (mods/vip/sub adelante, viewers atrás)
+  const pos = insertByPriority(queue, userObj);
+
   saveQueue(queue);
-  return res.json({ ok: true, status: "added", pos: queue.length, size: queue.length });
+  return res.json({
+    ok: true,
+    status: "added",
+    role,
+    pos: pos + 1,
+    size: queue.length,
+  });
 });
+
 
 
 
@@ -154,91 +152,8 @@ app.get("/api/cola", (req, res) => {
   res.json({ ok: true, size: queue.length, queue });
 });
 
-// ✅ HTML: muestra la cola (overlay)
 app.get("/cola", (req, res) => {
-  const platform = String(req.query.platform || "").toLowerCase();
-  const callToAction =
-    platform === "tiktok"
-      ? "Escribe <b>!jugar</b> para apuntarte"
-      : "Canjea puntos del canal para apuntarte";
-
-  res.setHeader("ngrok-skip-browser-warning", "1");
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  
-  // refresco cada 4 min = 240000 ms
-  const refreshMs = 10000;
-
-  res.end(`<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cola</title>
-
-  <!-- Refresco "hard" del navegador cada 4 min (opcional, lo dejamos) -->
-  <meta http-equiv="refresh" content="10">
-
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 16px; background: transparent; color: #fff; }
-    .card { background: rgba(0,0,0,0.65); border-radius: 14px; padding: 14px 16px; width: 290px; }
-    h1 { font-size: 18px; margin: 0 0 10px; }
-    .meta { font-size: 12px; opacity: .85; margin-bottom: 10px; }
-    ol { margin: 0; padding-left: 22px; }
-    li { margin: 6px 0; font-size: 16px; }
-    .empty { font-size: 14px; opacity: .9; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>🎮 Lista de espera por Jugar</h1>
-    <p>${callToAction}</p>
-    <div class="meta" id="meta">Cargando...</div>
-    <ol id="list"></ol>
-    <div class="empty" id="empty" style="display:none;">No hay nadie en espera por jugar. </b></div>
-  </div>
-
-  <script>
-    const refreshMs = ${refreshMs};
-
-    async function load() {
-      try {
-        const res = await fetch('/api/cola', { cache: 'no-store' });
-        const data = await res.json();
-
-        const list = document.getElementById('list');
-        const meta = document.getElementById('meta');
-        const empty = document.getElementById('empty');
-
-        list.innerHTML = '';
-
-        const now = new Date();
-        meta.textContent = \`Actualizado: \${now.toLocaleTimeString()} | En espera: \${data.size}\`;
-
-        if (!data.queue || data.queue.length === 0) {
-          empty.style.display = 'block';
-          return;
-        }
-
-        empty.style.display = 'none';
-
-        // Muestra los primeros 15 (ajusta si quieres)
-        data.queue.slice(0, 10).forEach((u, i) => {
-          const li = document.createElement('li');
-          // nickname si existe, si no uniqueId
-          const name = (u.nickname || u.uniqueId || 'usuario').toString();
-          li.textContent = \`\${name}\`;
-          list.appendChild(li);
-        });
-      } catch (e) {
-        document.getElementById('meta').textContent = 'Error cargando lista';
-      }
-    }
-
-    load();
-    setInterval(load, refreshMs); // ✅ refresco cada 4 min sin recargar toda la página
-  </script>
-</body>
-</html>`);
+  res.sendFile(path.join(__dirname, "pages", "cola.html"));
 });
 
 // Endpoint para sacar al siguiente
@@ -343,7 +258,11 @@ app.all("/api/remove", (req, res) => {
   return res.json({ ok: true, status: "removed", removed, size: queue.length });
 });
 
+
 app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "pages", "admin.html"));
+});
+/*app.get("/admin", (req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
 
   res.end(`<!doctype html>
@@ -455,6 +374,204 @@ app.get("/admin", (req, res) => {
 </script>
 </body>
 </html>`);
+});*/
+
+app.get("/api/comandos-mod", (req, res) => {
+  res.json({
+    ok: true,
+    items: loadModCommands(),
+  });
+});
+
+app.post("/api/comandos-mod/add", (req, res) => {
+  const { command, description } = req.body;
+
+  if (!command || !description) {
+    return res.status(400).json({ ok: false });
+  }
+
+  const result = addModCommand(command, description);
+  res.json({ ok: true, ...result });
+});
+
+app.post("/api/comandos-mod/delete", (req, res) => {
+  const { command } = req.body;
+  if (!command) return res.status(400).json({ ok: false });
+
+  deleteModCommand(command);
+  res.json({ ok: true });
+});
+
+app.post("/api/reorder", (req, res) => {
+  const from = Number(req.body?.from);
+  const to = Number(req.body?.to);
+
+  if (!Number.isInteger(from) || !Number.isInteger(to)) {
+    return res.status(400).json({ ok: false, error: "from/to must be integers" });
+  }
+
+  const queue = loadQueue();
+
+  if (from < 0 || from >= queue.length || to < 0 || to >= queue.length) {
+    return res.status(400).json({ ok: false, error: "index out of range" });
+  }
+
+  // ---- Regla SUB arriba ----
+  const subCount = queue.filter(u => u?.isSub === true).length;
+
+  const moving = queue[from];
+  const movingIsSub = moving?.isSub === true;
+
+  // Zona permitida:
+  // - SUBs solo pueden quedar en [0 .. subCount-1]
+  // - NO-SUBs solo pueden quedar en [subCount .. end]
+  const allowedMin = movingIsSub ? 0 : subCount;
+  const allowedMax = movingIsSub ? Math.max(subCount - 1, 0) : queue.length - 1;
+
+  if (to < allowedMin || to > allowedMax) {
+    return res.status(409).json({
+      ok: false,
+      error: "sub_rule_violation",
+      message: movingIsSub
+        ? "No puedes mover un SUB debajo de los no-SUB."
+        : "No puedes mover un no-SUB por encima de los SUB."
+    });
+  }
+  // --------------------------
+
+  const [moved] = queue.splice(from, 1);
+  queue.splice(to, 0, moved);
+
+  saveQueue(queue);
+  return res.json({ ok: true, size: queue.length, subCount });
+});
+
+app.get("/comandos-mod", (req, res) => {
+  // si quieres que solo tú lo veas, activa esto:
+  // if (!isAdmin(req)) return res.status(401).send("Unauthorized");
+  res.sendFile(path.join(__dirname, "pages", "mod-comandos.html"));
+/*
+  res.end(`<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Comandos Moderación</title>
+  <style>
+    body { margin:0; padding:16px; font-family: Arial, sans-serif; background:#0b0b0b; color:#fff; }
+    .wrap { max-width: 760px; margin: 0 auto; }
+    .card { background:#141414; border:1px solid #222; border-radius:16px; padding:16px; }
+    h1 { margin:0 0 12px; font-size:18px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 12px; }
+    input { flex:1; min-width:220px; padding:10px; border-radius:12px; border:1px solid #2a2a2a; background:#0f0f0f; color:#fff; }
+    button { padding:10px 12px; border:0; border-radius:12px; font-weight:700; cursor:pointer; background:#2a2a2a; color:#fff; }
+    button:hover { background:#3a3a3a; }
+    .danger { background:#b91c1c; }
+    .danger:hover { background:#dc2626; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding:10px; border-bottom:1px solid #222; text-align:left; vertical-align:top; }
+    th { font-size:12px; opacity:.85; }
+    .cmd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .meta { font-size:12px; opacity:.75; margin-bottom:10px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>🛡️ Comandos para Moderadores</h1>
+      <div class="meta">
+        <div id="status">Cargando…</div>
+        <div><button id="refresh">Refrescar</button></div>
+      </div>
+
+      <div class="row">
+        <input id="command" placeholder="Comando (ej: !limpiar)" />
+        <input id="description" placeholder="Descripción (qué hace)" />
+        <button id="add">Agregar</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width:160px">Comando</th>
+            <th>Descripción</th>
+            <th style="width:110px">Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+
+      <div id="empty" style="opacity:.8; padding:10px 0; display:none;">
+        No hay comandos registrados todavía.
+      </div>
+    </div>
+  </div>
+
+<script>
+  const tbody = document.getElementById('tbody');
+  const statusEl = document.getElementById('status');
+  const emptyEl = document.getElementById('empty');
+  const key = new URLSearchParams(location.search).get('key') || "";
+
+  function esc(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+  async function load() {
+    const res = await fetch('/api/comandos-mod', { cache: 'no-store' });
+    const data = await res.json();
+    const items = data.items || [];
+
+    statusEl.textContent = 'Actualizado: ' + new Date().toLocaleTimeString() + ' | Total: ' + items.length;
+
+    tbody.innerHTML = '';
+    if (!items.length) { emptyEl.style.display = 'block'; return; }
+    emptyEl.style.display = 'none';
+
+    for (const it of items) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = \`
+        <td class="cmd">\${esc(it.command)}</td>
+        <td>\${esc(it.description)}</td>
+        <td><button class="danger" data-cmd="\${esc(it.command)}">Eliminar</button></td>
+      \`;
+      tr.querySelector('button.danger').addEventListener('click', async (e) => {
+        const cmd = e.currentTarget.getAttribute('data-cmd');
+        if (!cmd) return;
+        if (!confirm('¿Eliminar ' + cmd + '?')) return;
+
+        await fetch('/api/comandos-mod/delete' + (key ? ('?key=' + encodeURIComponent(key)) : ''), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd })
+        });
+
+        await load();
+      });
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById('refresh').addEventListener('click', load);
+
+  document.getElementById('add').addEventListener('click', async () => {
+    const command = document.getElementById('command').value.trim();
+    const description = document.getElementById('description').value.trim();
+    if (!command || !description) return alert('Completa comando y descripción');
+
+    await fetch('/api/comandos-mod/add' + (key ? ('?key=' + encodeURIComponent(key)) : ''), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command, description })
+    });
+
+    document.getElementById('command').value = '';
+    document.getElementById('description').value = '';
+    await load();
+  });
+
+  load();
+</script>
+</body>
+</html>`);*/
 });
 
 const PORT = 5005;

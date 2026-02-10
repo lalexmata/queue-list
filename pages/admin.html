@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Cola</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 16px; background: #0b0b0b; color: #fff; }
+    .wrap { max-width: 760px; margin: 0 auto; }
+    .card { background: #141414; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; }
+    h1 { font-size: 18px; margin: 0 0 10px; }
+    .meta { font-size: 12px; opacity: .85; margin-bottom: 10px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center; }
+    button { cursor: pointer; border: 0; border-radius: 10px; padding: 8px 10px; font-weight: 700; }
+    .btn { background: #2a2a2a; color: #fff; }
+    .btn:hover { background: #3a3a3a; }
+    .danger { background: #b91c1c; color: #fff; }
+    .danger:hover { background: #dc2626; }
+
+    a.btnlink { text-decoration:none; }
+    a.btnlink > button { background:#2a2a2a; color:#fff; }
+    a.btnlink > button:hover { background:#3a3a3a; }
+
+    ul { list-style: none; margin: 0; padding: 0; }
+    li {
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding: 12px 0; border-bottom: 1px solid #222;
+      cursor: grab;
+    }
+    li.dragging { opacity: .5; }
+    li.over { outline: 2px dashed #3a3a3a; outline-offset: 6px; border-radius: 10px; }
+
+    .left { display:flex; flex-direction:column; gap:2px; }
+    .name { font-size: 16px; }
+    .sub { font-size: 12px; opacity:.85; }
+
+    .pill {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      margin-left:6px;
+      font-weight:800;
+      line-height: 1;
+      user-select:none;
+    }
+
+    /* Badges por rol */
+    .pill.broadcaster { background:#7c3aed; } /* morado */
+    .pill.moderator   { background:#2563eb; } /* azul */
+    .pill.vip         { background:#d97706; } /* dorado */
+    .pill.subscriber  { background:#065f46; } /* verde */
+    .pill.viewer      { background:#374151; } /* gris */
+
+    .rowbtns { display:flex; gap:8px; flex-wrap: wrap; justify-content: flex-end; }
+    .mini { padding: 6px 8px; font-weight: 800; border-radius: 10px; }
+
+    .hint { font-size: 12px; opacity: .75; margin: 8px 0 0; }
+    .topbar { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>🛠️ Admin Cola</h1>
+
+      <div class="meta">
+        <div id="meta">Cargando…</div>
+        <div class="topbar">
+          <a class="btnlink" href="/comandos-mod"><button type="button">📄 Comandos</button></a>
+          <button class="btn" id="refresh" type="button">Refrescar</button>
+          <button class="danger" id="clear" type="button">Limpiar todo</button>
+        </div>
+      </div>
+
+      <ul id="list"></ul>
+      <div id="empty" style="opacity:.85; display:none; padding: 10px 0;">No hay nadie en la cola.</div>
+
+      <div class="hint">
+        Tip: en PC puedes arrastrar jugadores. En móvil usa ⬆️⬇️ o ⏫⏬.
+      </div>
+    </div>
+  </div>
+
+<script>
+  let currentQueueSnapshot = [];
+  const listEl = document.getElementById('list');
+  const metaEl = document.getElementById('meta');
+  const emptyEl = document.getElementById('empty');
+
+  let dragFromIndex = null;
+  let isDragging = false;
+  let isBusy = false;
+  let refreshTimer = null;
+
+  async function loadQueue() {
+    const res = await fetch('/api/cola', { cache: 'no-store' });
+    return await res.json();
+  }
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  async function apiReorder(from, to) {
+    await fetch('/api/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to })
+    });
+  }
+
+  function getSubCount(q) {
+    return q.filter(u => u && u.isSub === true).length;
+  }
+
+  function canMove(q, from, to) {
+    const subCount = getSubCount(q);
+    const movingIsSub = q[from]?.isSub === true;
+
+    const allowedMin = movingIsSub ? 0 : subCount;
+    const allowedMax = movingIsSub ? Math.max(subCount - 1, 0) : q.length - 1;
+
+    return to >= allowedMin && to <= allowedMax;
+  }
+
+  function attachDnD(li, index) {
+    li.setAttribute("draggable", "true");
+    li.dataset.index = String(index);
+
+    li.addEventListener("dragstart", (e) => {
+      isDragging = true;
+      dragFromIndex = Number(li.dataset.index);
+      li.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+
+    li.addEventListener("dragend", () => {
+      li.classList.remove("dragging");
+      dragFromIndex = null;
+      isDragging = false;
+      document.querySelectorAll("li.over").forEach(x => x.classList.remove("over"));
+    });
+
+    li.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      li.classList.add("over");
+    });
+
+    li.addEventListener("dragleave", () => {
+      li.classList.remove("over");
+    });
+
+    li.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      li.classList.remove("over");
+
+      const toIndex = Number(li.dataset.index);
+      if (dragFromIndex === null || Number.isNaN(toIndex)) return;
+      if (dragFromIndex === toIndex) return;
+
+      if (isBusy) return;
+      isBusy = true;
+      try {
+        if (!canMove(currentQueueSnapshot, dragFromIndex, toIndex)) {
+          alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
+          return;
+        }
+        await apiReorder(dragFromIndex, toIndex);
+        await render();
+      } finally {
+        isBusy = false;
+      }
+    });
+  }
+
+  function badgeForUser(u) {
+    // Prioridad: role -> flags fallback
+    const role = (u && u.role) ? String(u.role).toLowerCase()
+                : (u && u.isSub === true) ? "subscriber"
+                : "viewer";
+
+    const badgeMap = {
+      broadcaster: '<span class="pill broadcaster">👑 STRMR</span>',
+      moderator:   '<span class="pill moderator">🛡 MOD</span>',
+      vip:         '<span class="pill vip">💎 VIP</span>',
+      subscriber:  '<span class="pill subscriber">⭐ SUB</span>',
+      viewer:      '<span class="pill viewer">👤 SEG</span>',
+    };
+
+    // Si no es viewer, mostramos su badge. Si es viewer, puedes ocultarlo si prefieres.
+    return badgeMap[role] || '';
+  }
+
+  async function render() {
+    const data = await loadQueue();
+    const q = data.queue || [];
+    currentQueueSnapshot = q;
+
+    metaEl.textContent = 'Actualizado: ' + new Date().toLocaleTimeString() + ' | En cola: ' + q.length;
+
+    listEl.innerHTML = '';
+    if (!q.length) { emptyEl.style.display = 'block'; return; }
+    emptyEl.style.display = 'none';
+
+    q.forEach((u, i) => {
+      const uid = u.uniqueId || '';
+      const name = u.nickname || uid || 'usuario';
+
+      const badge = badgeForUser(u);
+
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="left">
+          <div class="name">#${i+1} ${esc(name)} ${badge}</div>
+          <div class="sub">@${esc(uid)}</div>
+        </div>
+        <div class="rowbtns">
+          <button class="btn mini" data-act="top" title="Mover arriba del todo" type="button">⏫</button>
+          <button class="btn mini" data-act="up" title="Subir 1" type="button">⬆️</button>
+          <button class="btn mini" data-act="down" title="Bajar 1" type="button">⬇️</button>
+          <button class="btn mini" data-act="bottom" title="Mover al final" type="button">⏬</button>
+          <button class="danger mini" data-act="delete" type="button" alt="Eliminar usuario" title="Eliminar usuario">🗑️​</button>
+        </div>
+      `;
+
+      // Drag & drop (PC)
+      attachDnD(li, i);
+
+      // Botones (móvil/rápido)
+      li.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (isBusy) return;
+          const act = btn.dataset.act;
+          isBusy = true;
+
+          try {
+            if (act === "delete") {
+              if (!confirm('¿Eliminar a @' + uid + ' de la cola?')) return;
+              await fetch('/api/remove?uniqueId=' + encodeURIComponent(uid), { method: 'POST' });
+              await render();
+              return;
+            }
+
+            // Validación de regla SUB antes de mover por botones también
+            if (act === "up" && i > 0) {
+              if (!canMove(q, i, i - 1)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
+              await apiReorder(i, i - 1);
+            }
+
+            if (act === "down" && i < q.length - 1) {
+              if (!canMove(q, i, i + 1)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
+              await apiReorder(i, i + 1);
+            }
+
+            if (act === "top" && i > 0) {
+              if (!canMove(q, i, 0)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
+              await apiReorder(i, 0);
+            }
+
+            if (act === "bottom" && i < q.length - 1) {
+              if (!canMove(q, i, q.length - 1)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
+              await apiReorder(i, q.length - 1);
+            }
+
+            await render();
+          } finally {
+            isBusy = false;
+          }
+        });
+      });
+
+      listEl.appendChild(li);
+    });
+  }
+
+  document.getElementById('refresh').addEventListener('click', render);
+
+  document.getElementById('clear').addEventListener('click', async () => {
+    if (isBusy) return;
+    if (!confirm('¿Seguro que quieres limpiar TODA la cola?')) return;
+    isBusy = true;
+    try {
+      await fetch('/limpiar', { method: 'POST' });
+      await render();
+    } finally {
+      isBusy = false;
+    }
+  });
+
+  // Auto-refresh: NO refresca mientras arrastras / o si está ocupado
+  function startAutoRefresh() {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => {
+      if (!isDragging && !isBusy) render();
+    }, 10000);
+  }
+
+  render();
+  startAutoRefresh();
+</script>
+</body>
+</html>
