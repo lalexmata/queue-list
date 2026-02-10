@@ -68,9 +68,9 @@
       <div class="meta">
         <div id="meta">Cargando…</div>
         <div class="topbar">
-          <a class="btnlink" href="/comandos-mod"><button type="button">📄 Comandos</button></a>
-          <button class="btn" id="refresh" type="button">Refrescar</button>
-          <button class="danger" id="clear" type="button">Limpiar todo</button>
+          <a class="btnlink" href="/comandos-mod"><button type="button" title="Comandos de moderación">👨‍💻​</button></a>
+          <button class="btn" id="refresh" type="button" title="actualizar">🔃​</button>
+          <button class="danger" id="clear" type="button" title="limpiar todo">🧹</button>
         </div>
       </div>
 
@@ -78,7 +78,7 @@
       <div id="empty" style="opacity:.85; display:none; padding: 10px 0;">No hay nadie en la cola.</div>
 
       <div class="hint">
-        Tip: en PC puedes arrastrar jugadores. En móvil usa ⬆️⬇️ o ⏫⏬.
+        Tip: en PC puedes arrastrar jugadores. En móvil usa ⬆️⬇️ <!--o ⏫⏬-->.
       </div>
     </div>
   </div>
@@ -217,11 +217,11 @@
           <div class="sub">@${esc(uid)}</div>
         </div>
         <div class="rowbtns">
-          <button class="btn mini" data-act="top" title="Mover arriba del todo" type="button">⏫</button>
+          <!--<button class="btn mini" data-act="top" title="Mover arriba del todo" type="button">⏫</button>-->
           <button class="btn mini" data-act="up" title="Subir 1" type="button">⬆️</button>
           <button class="btn mini" data-act="down" title="Bajar 1" type="button">⬇️</button>
-          <button class="btn mini" data-act="bottom" title="Mover al final" type="button">⏬</button>
-          <button class="danger mini" data-act="delete" type="button" alt="Eliminar usuario" title="Eliminar usuario">🗑️​</button>
+          <!--<button class="btn mini" data-act="bottom" title="Mover al final" type="button">⏬</button>-->
+          <button class="danger mini" data-act="delete" type="button" alt="Eliminar usuario" title="Eliminar jugador">🗑️​</button>
         </div>
       `;
 
