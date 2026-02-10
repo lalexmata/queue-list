@@ -58,6 +58,11 @@ app.use((req, _res, next) => {
   next();
 });
 
+// Servir assets estáticos
+app.use("/assets", express.static(path.join(__dirname, "assets")));
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "pages", "index.html"));
+});
 // Endpoint para !jugar
 app.all("/jugar", (req, res) => {
   const uniqueId =
@@ -127,10 +132,6 @@ app.all("/jugar", (req, res) => {
     size: queue.length,
   });
 });
-
-
-
-
 
 // Endpoint para ver cola
 app.get("/lista", (req, res) => {
@@ -573,6 +574,12 @@ app.get("/comandos-mod", (req, res) => {
 </body>
 </html>`);*/
 });
+
+// 404 - Ruta no encontrada
+app.use((req, res) => {
+  res.status(404).sendFile(__dirname + "/pages/404.html");
+});
+
 
 const PORT = 5005;
 app.listen(PORT, () => console.log(`TikQueue server running on http://127.0.0.1:${PORT}`));

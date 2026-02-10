@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lalexmata - Sistema Cola</title>
+
+<style>
+  :root{
+    --bg0:#070A12;
+    --bg1:#0B1020;
+    --card:#121826cc;         /* semi-transparente */
+    --cardBorder:#1f2937;
+    --text:#ffffff;
+    --muted:rgba(255,255,255,.72);
+
+    /* Colores marca (ajústalos si quieres) */
+    --brandA:#2EE7D2;         /* turquesa */
+    --brandB:#4C7DFF;         /* azul */
+    --brandC:#7C3AED;         /* morado */
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    font-family: Arial, sans-serif;
+    color:var(--text);
+    min-height:100vh;
+    display:grid;
+    place-items:center;
+    padding:22px;
+
+    /* Fondo gamer suave */
+    background:
+      radial-gradient(1000px 700px at 15% 10%, rgba(46,231,210,.18), transparent 60%),
+      radial-gradient(900px 650px at 85% 15%, rgba(124,58,237,.14), transparent 62%),
+      radial-gradient(900px 650px at 40% 95%, rgba(76,125,255,.14), transparent 60%),
+      linear-gradient(180deg, var(--bg0), var(--bg1));
+    overflow:hidden;
+  }
+
+  /* grid "gamer" MUY suave */
+  body:before{
+    content:"";
+    position:fixed;
+    inset:-40%;
+    background:
+      linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
+    background-size: 70px 70px;
+    transform: rotate(12deg);
+    opacity:.06;
+    pointer-events:none;
+  }
+
+  /* brillo sutil */
+  body:after{
+    content:"";
+    position:fixed;
+    inset:0;
+    background:
+      radial-gradient(600px 280px at 50% 0%, rgba(46,231,210,.10), transparent 70%),
+      radial-gradient(520px 260px at 50% 100%, rgba(124,58,237,.10), transparent 70%);
+    pointer-events:none;
+  }
+
+  .container{
+    width:100%;
+    max-width:420px;
+    position:relative;
+    z-index:1;
+  }
+
+  .card{
+    background:var(--card);
+    border:1px solid rgba(31,41,55,.75);
+    border-radius:20px;
+    padding:26px 18px 18px;
+    box-shadow:
+      0 25px 60px rgba(0,0,0,.55),
+      0 0 0 1px rgba(255,255,255,.03) inset;
+    backdrop-filter: blur(10px);
+  }
+
+  .top{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:12px;
+    margin-bottom:16px;
+  }
+
+  .avatarWrap{
+    position:relative;
+    width:132px;
+    height:132px;
+    border-radius:999px;
+    padding:4px;
+    background: linear-gradient(135deg, var(--brandA), var(--brandB), var(--brandC));
+    box-shadow: 0 0 26px rgba(46,231,210,.18);
+  }
+
+  .avatar{
+    width:100%;
+    height:100%;
+    border-radius:999px;
+    object-fit:cover;
+    display:block;
+    border:2px solid rgba(0,0,0,.25);
+    background:#0b0b0b;
+  }
+
+  h1{
+    margin:0;
+    font-size:20px;
+    font-weight:900;
+    letter-spacing:.3px;
+  }
+
+  .subtitle{
+    margin:0;
+    font-size:13px;
+    color:var(--muted);
+  }
+
+  .btns{
+    display:grid;
+    gap:10px;
+    margin-top:14px;
+  }
+
+  .btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    text-decoration:none;
+    padding:12px 12px;
+    border-radius:14px;
+    font-weight:900;
+    font-size:14px;
+    transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
+    border:1px solid rgba(255,255,255,.08);
+  }
+
+  .btn:hover{
+    transform: translateY(-2px);
+    filter: brightness(1.05);
+  }
+
+  .btnAdmin{
+    background: linear-gradient(135deg, rgba(124,58,237,.95), rgba(76,125,255,.95));
+    box-shadow: 0 10px 30px rgba(124,58,237,.18);
+  }
+
+  .btnMods{
+    background: linear-gradient(135deg, rgba(46,231,210,.95), rgba(76,125,255,.92));
+    box-shadow: 0 10px 30px rgba(46,231,210,.14);
+  }
+
+  .footer{
+    margin-top:14px;
+    text-align:center;
+    font-size:12px;
+    color:rgba(255,255,255,.55);
+  }
+
+  /* mini “chips” decorativos */
+  .chips{
+    display:flex;
+    gap:8px;
+    justify-content:center;
+    margin-top:10px;
+    flex-wrap:wrap;
+  }
+  .chip{
+    font-size:11px;
+    padding:6px 10px;
+    border-radius:999px;
+    background: rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.08);
+    color:rgba(255,255,255,.75);
+  }
+</style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="card">
+
+      <div class="top">
+        <div class="avatarWrap">
+          <!-- Pon tu imagen en /public/tu-imagen.png -->
+          <img class="avatar" src="/assets/img/lalex_front.png" alt="Lalexmata">
+        </div>
+
+        <h1>👑 Lalexmata</h1>
+        <p class="subtitle">Sistema de Gestión de stream</p>
+
+        <div class="chips">
+          <span class="chip">🎮 Cola</span>
+          <span class="chip">🛠️ Admin</span>
+          <span class="chip">🛡️ Mods</span>
+        </div>
+      </div>
+
+      <div class="btns">
+        <a class="btn btnAdmin" href="/admin">🛠️ Panel Administrador</a>
+        <a class="btn btnMods" href="/comandos-mod">🎮 Comandos Moderadores</a>
+      </div>
+
+      <div class="footer">Powered by Lalexmata</div>
+    </div>
+  </div>
+</body>
+</html>

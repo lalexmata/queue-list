@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/assets/css/styles.css">
   <title>Comandos Moderación</title>
 
   <style>
@@ -77,7 +78,7 @@
   </style>
 </head>
 
-<body>
+<body class="app-bg">
 
 <div class="wrap">
   <div class="card">
@@ -86,21 +87,21 @@
       <h1>🛡️ Comandos Moderación</h1>
 
       <div class="nav">
-        <a class="btnlink" href="/admin">🎮 Admin Cola</a>
-        <a class="btnlink" href="#">📄 Otra Página</a>
-        <a class="btnlink" href="#">⚙️ Config</a>
+        <a class="btnlink" href="/admin" title="Administrar cola">🎮</a>
+        <!--<a class="btnlink" href="#">📄 Otra Página</a>
+        <a class="btnlink" href="#">⚙️ Config</a>-->
       </div>
     </div>
 
     <div class="meta">
       <div id="status">Cargando…</div>
-      <button id="refresh">Refrescar</button>
+      <button id="refresh" title="Refrescar">🔃</button>
     </div>
 
     <div class="row">
       <input id="command" placeholder="Comando (ej: !limpiar)" />
       <input id="description" placeholder="Descripción (qué hace)" />
-      <button id="add">Agregar</button>
+      <button id="add" title="Agregar">➕​</button>
     </div>
 
     <table>
@@ -162,7 +163,7 @@
         <td class="cmd">${esc(it.command)}</td>
         <td>${esc(it.description)}</td>
         <td>
-          <button class="danger" data-cmd="${esc(it.command)}">Eliminar</button>
+          <button class="danger" data-cmd="${esc(it.command)}" title="Eliminar comando">🗑️</button>
         </td>
       `;
 

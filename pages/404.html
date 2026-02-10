@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="/assets/css/styles.css">
+<title>404 - Página no encontrada</title>
+
+<style>
+  body{
+    margin:0;
+    font-family: Arial, sans-serif;
+    height:100vh;
+    display:grid;
+    place-items:center;
+    text-align:center;
+    color:white;
+
+    background:
+      radial-gradient(900px 600px at 20% 20%, rgba(46,231,210,.15), transparent 60%),
+      radial-gradient(800px 500px at 80% 80%, rgba(124,58,237,.15), transparent 60%),
+      linear-gradient(180deg,#070A12,#0B1020);
+  }
+
+  .card{
+    background:rgba(18,24,38,.85);
+    padding:40px 30px;
+    border-radius:20px;
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 25px 60px rgba(0,0,0,.6);
+    backdrop-filter:blur(10px);
+    max-width:400px;
+  }
+
+  h1{
+    font-size:60px;
+    margin:0;
+    background:linear-gradient(135deg,#2EE7D2,#4C7DFF,#7C3AED);
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+
+  h2{
+    margin:10px 0 15px;
+    font-weight:900;
+  }
+
+  p{
+    opacity:.7;
+    font-size:14px;
+  }
+
+  a{
+    display:inline-block;
+    margin-top:20px;
+    padding:12px 20px;
+    border-radius:12px;
+    text-decoration:none;
+    font-weight:900;
+    background:linear-gradient(135deg,#2EE7D2,#4C7DFF);
+    color:black;
+    transition:.2s;
+  }
+
+  a:hover{
+    transform:translateY(-2px);
+  }
+</style>
+</head>
+
+<body class="app-bg">
+  <div class="card">
+    <h1>404</h1>
+    <h2>Ruta no encontrada</h2>
+    <p>La página que intentas visitar no existe en el sistema Lalexmata.</p>
+    <a href="/">Volver al inicio</a>
+  </div>
+</body>
+</html>
