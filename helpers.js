@@ -4,6 +4,14 @@ const fs = require("fs");
 const MOD_COMMANDS_PATH = path.join(__dirname, "data", "mod_commands.json");
 const ADMIN_KEY = process.env.ADMIN_KEY || ""; // ponla en Railway Variables
 const BROADCASTER_LOGIN = (process.env.BROADCASTER_LOGIN || "lalexmata").toLowerCase();
+// Orden de prioridad (0 = más alto)
+const ROLE_RANK = {
+  broadcaster: 0,
+  moderator: 1,
+  vip: 2,
+  subscriber: 3,
+  viewer: 4
+};
 
 function ensureModCommandsFile() {
   if (!fs.existsSync(path.dirname(MOD_COMMANDS_PATH))) {
@@ -57,6 +65,14 @@ function resolveRole(q = {}, uniqueId = "") {
   return "viewer";
 }
 
+
+function normalizeRole(role) {
+  if (!role) return "viewer";
+  const r = String(role).toLowerCase();
+
+  if (ROLE_RANK[r] !== undefined) return r;
+  return "viewer";
+}
 
 function insertByPriority(queue, userObj) {
   const r = userObj.role || "viewer";
