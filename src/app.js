@@ -24,7 +24,10 @@ function createApp() {
   app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
   
   // rutas
-  app.use("/api", apiRoutes);
+  app.get("/api/cola", async (req, res) => {
+    res.json({ ok: true, queue: [] });
+  });
+  //app.use("/api", apiRoutes);
   app.use("/", frontRoutes);
 
   // 404

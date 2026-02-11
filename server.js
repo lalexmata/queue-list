@@ -1,6 +1,6 @@
-const express = require("express");
+const { createApp } = require("./src/app");
 
-const app = express();
+const app = createApp();
 
 app.get("/health", (_, res) => {
   res.json({ ok: true });
