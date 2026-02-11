@@ -5,12 +5,12 @@ const MOD_COMMANDS_PATH = path.join(__dirname, "data", "mod_commands.json");
 const ADMIN_KEY = process.env.ADMIN_KEY || ""; // ponla en Railway Variables
 const BROADCASTER_LOGIN = (process.env.BROADCASTER_LOGIN || "lalexmata").toLowerCase();
 // Orden de prioridad (0 = más alto)
-const ROLE_RANK = {
+const ROLE_BLOCK = {
   broadcaster: 0,
-  moderator: 1,
-  vip: 2,
-  subscriber: 3,
-  viewer: 4
+  moderator: 1000,
+  vip: 2000,
+  subscriber: 3000,
+  viewer: 4000,
 };
 
 function ensureModCommandsFile() {
@@ -51,7 +51,7 @@ function resolveRole(q = {}, uniqueId = "") {
   const uid = String(uniqueId || "").toLowerCase();
 
   // ✅ regla definitiva
-  if (uid && uid === BROADCASTER_LOGIN) return "broadcaster";
+  if (BROADCASTER_LOGIN && uid === BROADCASTER_LOGIN) return "broadcaster";
 
   const isBroadcaster = toBool(q.isBroadcaster);
   const isMod = toBool(q.isMod);
@@ -65,37 +65,17 @@ function resolveRole(q = {}, uniqueId = "") {
   return "viewer";
 }
 
-
 function normalizeRole(role) {
-  if (!role) return "viewer";
-  const r = String(role).toLowerCase();
-
-  if (ROLE_RANK[r] !== undefined) return r;
-  return "viewer";
+  const r = String(role || "viewer").toLowerCase();
+  return ROLE_BLOCK[r] !== undefined ? r : "viewer";
 }
 
-function insertByPriority(queue, userObj) {
-  const r = userObj.role || "viewer";
-  const myRank = ROLE_RANK[r] ?? 4;
-
-  // Inserta al final del grupo de su mismo rank (estable)
-  let insertAt = 0;
-  for (let i = 0; i < queue.length; i++) {
-    const ir = queue[i]?.role || "viewer";
-    const iRank = ROLE_RANK[ir] ?? 4;
-
-    if (iRank <= myRank) insertAt = i + 1; // seguimos pasando por ranks más altos o iguales
-    else break; // encontró alguien de rank inferior => aquí se corta
-  }
-
-  queue.splice(insertAt, 0, userObj);
-  return insertAt;
-}
 
 module.exports = {
+  ROLE_BLOCK,
   loadModCommands,
   saveModCommands,
   isAdmin,
   resolveRole,
-  insertByPriority
+  normalizeRole,
 };
