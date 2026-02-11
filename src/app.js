@@ -21,7 +21,8 @@ function createApp() {
   // estáticos
   app.use("/assets", express.static(path.join(__dirname, "assets")));
   app.get("/health", (req, res) => res.status(200).send("ok"));
-  app.get("/", (req, res) => res.status(200).send("queue-list up ✅"));
+  app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
+  
   // rutas
   app.use("/api", apiRoutes);
   app.use("/", frontRoutes);
@@ -29,6 +30,11 @@ function createApp() {
   // 404
   app.use((req, res) => {
     res.status(404).sendFile(path.join(__dirname, "pages", "404.html"));
+  });
+
+  app.use((err, req, res, next) => {
+    console.error("❌ Express error:", err);
+    res.status(500).json({ ok: false, error: err?.message || "internal_error" });
   });
 
   return app;

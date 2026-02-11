@@ -16,8 +16,13 @@ const { resolveRole } = require("../../helpers/helpers");
 
 // /api/cola
 router.get("/cola", async (req, res) => {
-  const queue = await getQueue();
-  res.json({ ok: true, size: queue.length, queue });
+  try {
+    const data = await getQueue(); // tu consulta a Neon
+    res.json({ ok: true, queue: data });
+  } catch (e) {
+    console.error("❌ /api/cola error:", e);
+    res.status(500).json({ ok: false, error: "db_error", detail: e.message });
+  }
 });
 
 // /api/limpiar
