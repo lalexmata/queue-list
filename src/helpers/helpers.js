@@ -1,7 +1,4 @@
-const path = require("path");
-const fs = require("fs");
 
-const MOD_COMMANDS_PATH = path.join(__dirname, "data", "mod_commands.json");
 const ADMIN_KEY = process.env.ADMIN_KEY || ""; // ponla en Railway Variables
 const BROADCASTER_LOGIN = (process.env.BROADCASTER_LOGIN || "lalexmata").toLowerCase();
 // Orden de prioridad (0 = más alto)
@@ -13,28 +10,6 @@ const ROLE_BLOCK = {
   viewer: 4000,
 };
 
-function ensureModCommandsFile() {
-  if (!fs.existsSync(path.dirname(MOD_COMMANDS_PATH))) {
-    fs.mkdirSync(path.dirname(MOD_COMMANDS_PATH), { recursive: true });
-  }
-  if (!fs.existsSync(MOD_COMMANDS_PATH)) {
-    fs.writeFileSync(MOD_COMMANDS_PATH, "[]", "utf8");
-  }
-}
-
-function loadModCommands() {
-  ensureModCommandsFile();
-  try {
-    return JSON.parse(fs.readFileSync(MOD_COMMANDS_PATH, "utf8"));
-  } catch {
-    return [];
-  }
-}
-
-function saveModCommands(list) {
-  ensureModCommandsFile();
-  fs.writeFileSync(MOD_COMMANDS_PATH, JSON.stringify(list, null, 2), "utf8");
-}
 
 function isAdmin(req) {
   // Permite por query ?key= o por header x-admin-key
@@ -67,14 +42,16 @@ function resolveRole(q = {}, uniqueId = "") {
 
 function normalizeRole(role) {
   const r = String(role || "viewer").toLowerCase();
-  return ROLE_BLOCK[r] !== undefined ? r : "viewer";
+  if (["broadcaster", "streamer"].includes(r)) return "broadcaster";
+  if (["moderator", "mod"].includes(r)) return "moderator";
+  if (["vip"].includes(r)) return "vip";
+  if (["subscriber", "sub"].includes(r)) return "subscriber";
+  return "viewer";
 }
 
 
 module.exports = {
   ROLE_BLOCK,
-  loadModCommands,
-  saveModCommands,
   isAdmin,
   resolveRole,
   normalizeRole,
