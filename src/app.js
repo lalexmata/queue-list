@@ -20,7 +20,8 @@ function createApp() {
 
   // estáticos
   app.use("/assets", express.static(path.join(__dirname, "assets")));
-
+  app.get("/health", (req, res) => res.status(200).send("ok"));
+  app.get("/", (req, res) => res.status(200).send("queue-list up ✅"));
   // rutas
   app.use("/api", apiRoutes);
   app.use("/", frontRoutes);
