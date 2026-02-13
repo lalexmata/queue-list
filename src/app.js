@@ -1,8 +1,7 @@
 const express = require("express");
 const path = require("path");
 
-// Lazy load routes to avoid DB connection issues on startup
-// const apiRoutes = require("./routes/api");
+const apiRoutes = require("./routes/api");
 const frontRoutes = require("./routes/front");
 
 function createApp() {
@@ -37,13 +36,8 @@ function createApp() {
   // estáticos
   app.use("/assets", express.static(path.join(__dirname, "assets")));
   
-  // rutas API (temporalmente deshabilitadas para evitar error de DB)
-  app.get("/api/cola", async (req, res) => {
-    res.json({ ok: true, queue: [], message: "API temporarily disabled" });
-  });
-  
-  // Descomentar cuando la DB esté lista:
-  // app.use("/api", apiRoutes);
+  // rutas API
+  app.use("/api", apiRoutes);
   
   // rutas frontend
   app.use("/", frontRoutes);
