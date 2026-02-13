@@ -1,6 +1,18 @@
 // Cargar variables de entorno
 require('dotenv').config();
 
+// Manejo de errores no capturados
+process.on('uncaughtException', (err) => {
+  console.error('💥 Uncaught Exception:', err);
+  console.error(err.stack);
+  // No salir inmediatamente en Railway, intentar recuperarse
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+  // No salir inmediatamente
+});
+
 const { createApp } = require("./src/app");
 
 console.log('🔧 Starting application...');
