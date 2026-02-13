@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS mod_commands (
+  id SERIAL PRIMARY KEY,
+  command TEXT UNIQUE NOT NULL,
+  description TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

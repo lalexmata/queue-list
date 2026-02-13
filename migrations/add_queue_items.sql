@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS queue_items (
+  id SERIAL PRIMARY KEY,
+  unique_id TEXT UNIQUE NOT NULL,
+  nickname  TEXT NOT NULL,
+  role      TEXT NOT NULL DEFAULT 'viewer',
+  is_sub    BOOLEAN NOT NULL DEFAULT false,
+  ts        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  position  INTEGER NOT NULL DEFAULT 999999
+);
