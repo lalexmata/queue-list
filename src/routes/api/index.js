@@ -83,8 +83,8 @@ router.post("/reorder", async (req, res) => {
     return res.json(result);
   } catch (e) {
     const status = e.status || 500;
-    const code = e.code || "error";
-    return res.status(status).json({ ok: false, error: code, message: e.message });
+    const code = e.code || e.message || "error";
+    return res.status(status).json({ ok: false, error: code, code: code, message: e.message });
   }
 });
 

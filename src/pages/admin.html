@@ -106,11 +106,26 @@
   }
 
   async function apiReorder(from, to) {
-    await fetch('/api/reorder', {
+    const res = await fetch('/api/reorder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ from, to })
     });
+    
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const code = data.code || data.error || 'error';
+      
+      if (code === 'role_block_violation') {
+        throw new Error('⚠️ Jerarquía de roles: Solo puedes mover usuarios dentro de su mismo nivel o hacia abajo.\n\n👑 Broadcaster > 🛡 Moderador > 💎 VIP > ⭐ Suscriptor > 👤 Seguidor');
+      } else if (code === 'sub_rule_violation') {
+        throw new Error('⭐ Los suscriptores siempre van primero en la cola.');
+      } else {
+        throw new Error(data.error || 'Error al reordenar');
+      }
+    }
+    
+    return res.json();
   }
 
   function getSubCount(q) {
@@ -171,6 +186,8 @@
         }
         await apiReorder(dragFromIndex, toIndex);
         await render();
+      } catch (err) {
+        alert(err.message || 'Error al reordenar');
       } finally {
         isBusy = false;
       }
@@ -260,27 +277,31 @@
               }
 
               // Validación de regla SUB antes de mover por botones también
-              if (act === "up" && i > 0) {
-                if (!canMove(q, i, i - 1)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
-                await apiReorder(i, i - 1);
-              }
+              try {
+                if (act === "up" && i > 0) {
+                  if (!canMove(q, i, i - 1)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
+                  await apiReorder(i, i - 1);
+                }
 
-              if (act === "down" && i < q.length - 1) {
-                if (!canMove(q, i, i + 1)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
-                await apiReorder(i, i + 1);
-              }
+                if (act === "down" && i < q.length - 1) {
+                  if (!canMove(q, i, i + 1)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
+                  await apiReorder(i, i + 1);
+                }
 
-              if (act === "top" && i > 0) {
-                if (!canMove(q, i, 0)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
-                await apiReorder(i, 0);
-              }
+                if (act === "top" && i > 0) {
+                  if (!canMove(q, i, 0)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
+                  await apiReorder(i, 0);
+                }
 
-              if (act === "bottom" && i < q.length - 1) {
-                if (!canMove(q, i, q.length - 1)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
-                await apiReorder(i, q.length - 1);
-              }
+                if (act === "bottom" && i < q.length - 1) {
+                  if (!canMove(q, i, q.length - 1)) return alert("Regla: los SUB van arriba. No puedes cruzar la línea SUB/no-SUB.");
+                  await apiReorder(i, q.length - 1);
+                }
 
-              await render();
+                await render();
+              } catch (err) {
+                alert(err.message || 'Error al reordenar');
+              }
             } finally {
               isBusy = false;
             }
