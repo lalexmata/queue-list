@@ -7,6 +7,7 @@ async function getQueue() {
             nickname,
             role,
             is_sub AS "isSub",
+            platform,
             ts
      FROM queue_items
      ORDER BY position ASC, ts ASC`
@@ -43,14 +44,15 @@ async function upsertByPriority(user) {
   const nextPos = Number(rows[0].maxpos) + 1;
 
   await pool.query(
-    `INSERT INTO queue_items (unique_id, nickname, role, is_sub, ts, position)
-     VALUES ($1,$2,$3,$4,NOW(),$5)
+    `INSERT INTO queue_items (unique_id, nickname, role, is_sub, platform, ts, position)
+     VALUES ($1,$2,$3,$4,$5,NOW(),$6)
      ON CONFLICT (unique_id) DO UPDATE SET
        nickname = EXCLUDED.nickname,
        role = EXCLUDED.role,
        is_sub = EXCLUDED.is_sub,
+       platform = EXCLUDED.platform,
        ts = NOW()`,
-    [user.uniqueId, user.nickname, role, role === "subscriber", nextPos]
+    [user.uniqueId, user.nickname, role, role === "subscriber", user.platform || 'unknown', nextPos]
   );
 
   return nextPos;
@@ -62,6 +64,7 @@ async function getQueueWithPosition() {
             nickname,
             role,
             is_sub AS "isSub",
+            platform,
             ts,
             position
      FROM queue_items

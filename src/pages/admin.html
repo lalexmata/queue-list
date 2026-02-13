@@ -210,14 +210,27 @@
       q.forEach((u, i) => {
         const uid = u.uniqueId || '';
         const name = u.nickname || uid || 'usuario';
+        const platform = u.platform || 'unknown';
 
         const badge = badgeForUser(u);
+        
+        // Emoji por plataforma
+        const platformEmoji = {
+          'twitch': '🟣',
+          'tiktok': '⚫',
+          'youtube': '🔴',
+          'kick': '🟢',
+          'facebook': '🔵',
+          'unknown': '❓'
+        };
+        
+        const emoji = platformEmoji[platform.toLowerCase()] || platformEmoji.unknown;
 
         const li = document.createElement('li');
         li.innerHTML = `
           <div class="left">
-            <div class="name">#${i+1} ${esc(name)} ${badge}</div>
-            <div class="sub">@${esc(uid)}</div>
+            <div class="name">#${i+1} ${emoji} ${esc(name)} ${badge}</div>
+            <div class="sub">@${esc(uid)} · ${esc(platform)}</div>
           </div>
           <div class="rowbtns">
             <!--<button class="btn mini" data-act="top" title="Mover arriba del todo" type="button">⏫</button>-->

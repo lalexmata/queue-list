@@ -149,11 +149,24 @@
       const uid = u.uniqueId || "";
       const name = u.nickname || uid || "usuario";
       const role = getRole(u);
+      const platform = u.platform || "unknown";
+      
+      // Emoji por plataforma
+      const platformEmoji = {
+        'twitch': '🟣',
+        'tiktok': '⚫',
+        'youtube': '🔴',
+        'kick': '🟢',
+        'facebook': '🔵',
+        'unknown': '❓'
+      };
+      
+      const emoji = platformEmoji[platform.toLowerCase()] || platformEmoji.unknown;
 
       const li = document.createElement("li");
       li.innerHTML = `
         <span class="nameRow">
-          ${esc(name)}
+          ${emoji} ${esc(name)}
           ${pillForRole(role)}
         </span>
       `;

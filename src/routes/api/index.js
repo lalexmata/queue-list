@@ -50,18 +50,23 @@ router.all("/jugar", async (req, res) => {
     (req.body && (req.body.nickname || req.body.displayName || req.body.name)) ||
     req.query.nickname || req.query.displayName || req.query.name || uniqueId;
 
+  const platform =
+    (req.body && req.body.platform) ||
+    req.query.platform || "unknown";
+
   if (!uniqueId || String(uniqueId).includes("{") || String(uniqueId).includes("%")) {
     return res.status(400).json({ ok: false, error: "invalid uniqueId" });
   }
 
   // role lo calculas como ya lo vienes haciendo (o lo dejas viewer si no viene)
   const role = resolveRole({ ...req.query, ...(req.body || {}) }, uniqueId);
-  console.log("API /jugar data", { uniqueId, nickname, role });
+  console.log("API /jugar data", { uniqueId, nickname, role, platform });
 
   const pos = await upsertByPriority({
     uniqueId: String(uniqueId),
     nickname: String(nickname || uniqueId),
     role,
+    platform: String(platform),
   });
 
   const queue = await getQueue();
