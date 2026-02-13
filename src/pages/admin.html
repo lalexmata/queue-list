@@ -323,7 +323,7 @@
     if (!confirm('¿Seguro que quieres limpiar TODA la cola?')) return;
     isBusy = true;
     try {
-      await fetch('/limpiar', { method: 'POST' });
+      await fetch('/api/limpiar', { method: 'POST' });
       await render();
     } finally {
       isBusy = false;
