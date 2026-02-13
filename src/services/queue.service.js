@@ -108,24 +108,29 @@ async function reorderByIndex(from, to) {
       throw Object.assign(new Error("sub_rule_violation"), { status: 409, code: "sub_rule_violation" });
     }
 
-    // ✅ Mantener dentro del mismo bloque de rol (opcional, recomendado)
-    // Si estás usando ROLE_BLOCK (0,1000,2000,3000,4000), evitamos que cruce bloque.
-    const base = ROLE_BLOCK[movingRole] ?? 4000;
-    const upper = base + 1000;
-
-    // Filtramos la lista a solo los que están dentro del mismo bloque
-    const sameBlockIdxs = q
-      .map((u, idx) => ({ u, idx }))
-      .filter(x => (x.u.position >= base && x.u.position < upper))
-      .map(x => x.idx);
-
-    // Si no estás usando bloques en position aún, puedes comentar esto:
-    if (sameBlockIdxs.length) {
-      const minIdx = Math.min(...sameBlockIdxs);
-      const maxIdx = Math.max(...sameBlockIdxs);
-      if (to < minIdx || to > maxIdx) {
-        throw Object.assign(new Error("role_block_violation"), { status: 409, code: "role_block_violation" });
-      }
+    // ✅ Mantener dentro del mismo bloque de rol
+    // Solo permitimos mover un usuario si el destino tiene usuarios del mismo rol o superior
+    const targetUser = q[to];
+    const targetRole = normalizeRole(targetUser.role);
+    
+    // Obtener prioridad numérica del rol (menor = mayor prioridad)
+    const rolePriority = {
+      'broadcaster': 0,
+      'moderator': 1,
+      'vip': 2,
+      'subscriber': 3,
+      'viewer': 4
+    };
+    
+    const movingPriority = rolePriority[movingRole] ?? 4;
+    const targetPriority = rolePriority[targetRole] ?? 4;
+    
+    // Un usuario NO puede moverse encima de alguien con mayor prioridad (menor número)
+    if (movingPriority > targetPriority) {
+      throw Object.assign(
+        new Error("role_block_violation: No puedes moverte encima de usuarios con mayor rango"), 
+        { status: 409, code: "role_block_violation" }
+      );
     }
 
     // ✅ Reordenar: sacamos y reinsertamos en el array (solo para calcular nuevos positions)
