@@ -1,9 +1,26 @@
 const { Pool } = require("pg");
 
-const data = 'postgresql://neondb_owner:npg_UhugfX92IFwe@ep-damp-sound-aimbn8i9-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+// Usar variable de entorno para la URL de conexión
+const connectionString = process.env.DATABASE_URL || process.env.DB_URL;
+
+if (!connectionString) {
+  console.error('⚠️  No DATABASE_URL or DB_URL environment variable found');
+}
+
 const pool = new Pool({
-  connectionString: data,
-  ssl: { rejectUnauthorized: false }, // Neon normalmente OK así
+  connectionString,
+  ssl: process.env.NODE_ENV === 'production' 
+    ? { rejectUnauthorized: false } 
+    : false,
+});
+
+// Verificar conexión al iniciar
+pool.on('connect', () => {
+  console.log('✅ Database connected successfully');
+});
+
+pool.on('error', (err) => {
+  console.error('❌ Unexpected database error:', err);
 });
 
 module.exports = { pool };
