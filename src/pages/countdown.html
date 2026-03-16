@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Countdown Overlay</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Iceland&display=swap"
+    rel="stylesheet"
+  />
+
+  <style>
+  :root {
+    --bg-color: rgba(70, 24, 140, 0.64);
+    --text-color: #ffffff;
+    --title-size: 24px;
+    --timer-size: 100px;
+    --container-width: 860px;
+    --timer-height: 165px;
+    --radius: 28px;
+    --padding-x: 36px;
+    --padding-y: 18px;
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: "Iceland", sans-serif;
+  }
+
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 18px;
+  }
+
+  .wrapper {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .timer-box {
+    min-width: var(--container-width);
+    min-height: var(--timer-height);
+    padding: var(--padding-y) var(--padding-x);
+    border-radius: var(--radius);
+    background: var(--bg-color);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    gap: 8px;
+  }
+
+  .title {
+    position: relative;
+    z-index: 1;
+    color: var(--text-color);
+    font-size: var(--title-size);
+    line-height: 1;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: center;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    display: none;
+  }
+
+  .timer {
+    position: relative;
+    z-index: 1;
+    color: var(--text-color);
+    font-size: var(--timer-size);
+    line-height: 1;
+    letter-spacing: 6px;
+    text-align: center;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 900px) {
+    :root {
+      --container-width: 92vw;
+      --timer-height: 135px;
+      --timer-size: 60px;
+      --title-size: 20px;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="wrapper">
+      <div class="timer-box">
+      <div id="title" class="title" style="font-size: 50px;"></div>
+      <div id="timer" class="timer" style="font-size: 100px;">00:00:00</div>
+    </div>
+  </div>
+
+  <script>
+    const titleEl = document.getElementById('title');
+    const timerEl = document.getElementById('timer');
+
+    let configState = null;
+    let renderInterval = null;
+    let syncInterval = null;
+
+    function pad(num) {
+      return String(num).padStart(2, '0');
+    }
+
+    function formatTime(totalSeconds) {
+      const safe = Math.max(0, Math.floor(totalSeconds));
+      const hours = Math.floor(safe / 3600);
+      const minutes = Math.floor((safe % 3600) / 60);
+      const seconds = safe % 60;
+      return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    }
+
+    function getRemainingSecondsFromState(state) {
+      if (!state || !state.isRunning || !state.targetIso) return 0;
+
+      const endMs = new Date(state.targetIso).getTime();
+      const nowMs = Date.now();
+
+      return Math.max(0, Math.floor((endMs - nowMs) / 1000));
+    }
+
+    function render() {
+      if (!configState) return;
+
+      titleEl.textContent = configState.title || '';
+      titleEl.style.display = configState.showTitle ? 'block' : 'none';
+
+      const remainingSeconds = getRemainingSecondsFromState(configState);
+      timerEl.textContent = formatTime(remainingSeconds);
+      timerEl.style.marginTop = configState.showTitle ? '-35px' : '0';
+      
+      if (remainingSeconds <= 0) {
+        configState.isRunning = false;
+      }
+    }
+
+    function startRenderLoop() {
+      if (renderInterval) clearInterval(renderInterval);
+      render();
+      renderInterval = setInterval(render, 250);
+    }
+
+    async function syncFromServer() {
+      try {
+        const response = await fetch('/api/countdown/config');
+        const data = await response.json();
+
+        if (!response.ok || !data.ok || !data.config) {
+          throw new Error('No se pudo cargar la configuración');
+        }
+
+        configState = data.config;
+        render();
+      } catch (error) {
+        console.error('Error sincronizando countdown:', error);
+      }
+    }
+
+    async function init() {
+      await syncFromServer();
+      startRenderLoop();
+
+      if (syncInterval) clearInterval(syncInterval);
+      syncInterval = setInterval(syncFromServer, 3000);
+    }
+
+    init();
+  </script>
+</body>
+</html>

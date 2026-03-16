@@ -8,5 +8,6 @@ router.get("/", (req, res) => res.sendFile(path.join(PAGES, "index.html")));
 router.get("/admin", (req, res) => res.sendFile(path.join(PAGES, "admin.html")));
 router.get("/cola", (req, res) => res.sendFile(path.join(PAGES, "cola.html")));
 router.get("/comandos-mod", (req, res) => res.sendFile(path.join(PAGES, "mod-comandos.html")));
-
+router.get("/admin-countdown", (req, res) => res.sendFile(path.join(PAGES, "admin-countdown.html")));
+router.get("/overlays/countdown", (req, res) => res.sendFile(path.join(PAGES, "countdown.html")));
 module.exports = router;
