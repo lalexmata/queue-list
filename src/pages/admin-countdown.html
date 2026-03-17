@@ -399,10 +399,18 @@
 
     function formatTime(totalSeconds) {
       const safe = Math.max(0, Math.floor(Number(totalSeconds || 0)));
-      const hours = Math.floor(safe / 3600);
+
+      const days = Math.floor(safe / 86400);
+      const hours = Math.floor((safe % 86400) / 3600);
       const minutes = Math.floor((safe % 3600) / 60);
       const seconds = safe % 60;
-      return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+
+      if (days > 0) {
+        return `${pad(days)}:${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+      }
+
+      const totalHours = Math.floor(safe / 3600);
+      return `${pad(totalHours)}:${pad(minutes)}:${pad(seconds)}`;
     }
 
     function formatDateTime(iso) {
