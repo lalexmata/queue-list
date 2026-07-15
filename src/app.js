@@ -1,11 +1,22 @@
 const express = require("express");
 const path = require("path");
+const session = require("express-session");
 
 const apiRoutes = require("./routes/api");
 const frontRoutes = require("./routes/front");
+const socialFrontRoutes = require("./routes/front/social");
+const socialApiRoutes = require("./routes/api/social");
 
 function createApp() {
   const app = express();
+
+  // sesión
+  app.use(session({
+    secret: process.env.SESSION_SECRET || "change_this_secret_in_env",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, maxAge: 8 * 60 * 60 * 1000 }, // 8 horas
+  }));
 
   // parsers
   app.use(express.json({ limit: "1mb" }));
@@ -36,10 +47,12 @@ function createApp() {
   // estáticos
   app.use("/assets", express.static(path.join(__dirname, "assets")));
   
-  // rutas API
+  // rutas API (social primero para evitar que /api capture /api/social)
+  app.use("/api/social", socialApiRoutes);
   app.use("/api", apiRoutes);
-  
+
   // rutas frontend
+  app.use("/social", socialFrontRoutes);
   app.use("/", frontRoutes);
 
   // 404
