@@ -71,6 +71,16 @@
     }
 
     .platform-card .logo { font-size: 32px; margin-bottom: 10px; }
+    .platform-card .logo img {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin: 0 auto 10px;
+      display: block;
+      border: 2px solid #2a2a2a;
+    }
+    .platform-card .username { font-size: 12px; color: #666; margin-bottom: 4px; }
     .platform-card .name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
     .platform-card .status {
       font-size: 12px;
@@ -252,22 +262,25 @@
     <div class="platforms">
 
       <div class="platform-card" id="yt-card">
-        <div class="logo">▶️</div>
+        <div class="logo" id="yt-logo">▶️</div>
         <div class="name">YouTube</div>
+        <div class="username" id="yt-username" style="display:none; font-size: 12px; color: #666; margin-bottom: 4px;"></div>
         <div class="status" id="yt-status">Cargando...</div>
         <a class="connect-btn" id="yt-btn" href="/api/social/youtube/connect">Conectar</a>
       </div>
 
       <div class="platform-card" id="ig-card">
-        <div class="logo">📸</div>
+        <div class="logo" id="ig-logo">📸</div>
         <div class="name">Instagram</div>
+        <div class="username" id="ig-username" style="display:none; font-size: 12px; color: #666; margin-bottom: 4px;"></div>
         <div class="status" id="ig-status">Cargando...</div>
         <a class="connect-btn" id="ig-btn" href="/api/social/instagram/connect">Conectar</a>
       </div>
 
       <div class="platform-card" id="tt-card">
-        <div class="logo">🎵</div>
+        <div class="logo" id="tt-logo">🎵</div>
         <div class="name">TikTok</div>
+        <div class="username" id="tt-username" style="display:none; font-size: 12px; color: #666; margin-bottom: 4px;"></div>
         <div class="status" id="tt-status">Cargando...</div>
         <a class="connect-btn" id="tt-btn" href="/api/social/tiktok/connect">Conectar</a>
       </div>
@@ -327,11 +340,10 @@
   </div>
 
   <script>
-    // ── Estado de conexiones ──────────────────────────────────────────────────
     const platformMap = {
-      youtube:   { status: 'yt-status',  btn: 'yt-btn',  check: 'check-yt',  connectHref: '/api/social/youtube/connect',   disconnectHref: '/api/social/youtube/disconnect'   },
-      instagram: { status: 'ig-status',  btn: 'ig-btn',  check: 'check-ig',  connectHref: '/api/social/instagram/connect', disconnectHref: '/api/social/instagram/disconnect' },
-      tiktok:    { status: 'tt-status',  btn: 'tt-btn',  check: 'check-tt',  connectHref: '/api/social/tiktok/connect',    disconnectHref: '/api/social/tiktok/disconnect'    },
+      youtube:   { status: 'yt-status',  btn: 'yt-btn',  check: 'check-yt',  logo: 'yt-logo',  username: 'yt-username',  connectHref: '/api/social/youtube/connect',   disconnectHref: '/api/social/youtube/disconnect'   },
+      instagram: { status: 'ig-status',  btn: 'ig-btn',  check: 'check-ig',  logo: 'ig-logo',  username: 'ig-username',  connectHref: '/api/social/instagram/connect', disconnectHref: '/api/social/instagram/disconnect' },
+      tiktok:    { status: 'tt-status',  btn: 'tt-btn',  check: 'check-tt',  logo: 'tt-logo',  username: 'tt-username',  connectHref: '/api/social/tiktok/connect',    disconnectHref: '/api/social/tiktok/disconnect'    },
     };
 
     async function loadStatus() {
@@ -339,7 +351,7 @@
         const res = await fetch('/api/social/status');
         const data = await res.json();
 
-        for (const [platform, connected] of Object.entries(data)) {
+        for (const [platform, config] of Object.entries(data)) {
           const cfg = platformMap[platform];
           if (!cfg) continue;
 
@@ -347,14 +359,27 @@
           const btnEl    = document.getElementById(cfg.btn);
           const checkEl  = document.getElementById(cfg.check);
           const checkInput = checkEl.querySelector('input');
+          const logoEl   = document.getElementById(cfg.logo);
+          const usernameEl = document.getElementById(cfg.username);
 
-          if (connected) {
+          if (config.connected) {
             statusEl.textContent = '✅ Conectado';
             statusEl.className = 'status connected';
             btnEl.textContent = 'Desconectar';
             btnEl.className = 'connect-btn disconnect';
             btnEl.href = cfg.disconnectHref;
             checkEl.classList.remove('disabled');
+
+            // Mostrar foto de perfil si existe
+            if (config.photo) {
+              logoEl.innerHTML = `<img src="${config.photo}" alt="${platform}">`;
+            }
+
+            // Mostrar nombre de usuario
+            if (config.name) {
+              usernameEl.textContent = config.name;
+              usernameEl.style.display = 'block';
+            }
           } else {
             statusEl.textContent = 'No conectado';
             statusEl.className = 'status';
@@ -363,6 +388,11 @@
             btnEl.href = cfg.connectHref;
             checkEl.classList.add('disabled');
             checkInput.checked = false;
+
+            // Restablecer logo a emoji
+            const defaultEmojis = { youtube: '▶️', instagram: '📸', tiktok: '🎵' };
+            logoEl.innerHTML = defaultEmojis[platform] || '🔗';
+            usernameEl.style.display = 'none';
           }
         }
 

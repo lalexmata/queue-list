@@ -23,4 +23,7 @@ pool.on('error', (err) => {
   console.error('❌ Unexpected database error:', err);
 });
 
-module.exports = { pool };
+module.exports = {
+  pool,
+  query: (text, params) => pool.query(text, params),
+};
