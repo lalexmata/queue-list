@@ -6,6 +6,7 @@ const apiRoutes = require("./routes/api");
 const frontRoutes = require("./routes/front");
 const socialFrontRoutes = require("./routes/front/social");
 const socialApiRoutes = require("./routes/api/social");
+const songRequestApiRoutes = require("./routes/api/songRequest");
 
 function createApp() {
   const app = express();
@@ -49,6 +50,7 @@ function createApp() {
   
   // rutas API (social primero para evitar que /api capture /api/social)
   app.use("/api/social", socialApiRoutes);
+  app.use("/api/song-request", songRequestApiRoutes);
   app.use("/api", apiRoutes);
 
   // rutas frontend

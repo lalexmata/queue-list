@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canción actual</title>
+  <style>
+    :root {
+      --aqua:#2ee7d2;
+      --blue:#4c7dff;
+      --purple:#7c3aed;
+    }
+    * { box-sizing:border-box; }
+    html,body {
+      width:100%; height:100%; margin:0; overflow:hidden;
+      background:transparent !important;
+      font-family:Arial,Helvetica,sans-serif; color:#fff;
+    }
+    body { display:flex; align-items:flex-start; justify-content:flex-start; padding:20px; }
+    .widget {
+      width:460px; min-height:112px; display:grid;
+      grid-template-columns:112px minmax(0,1fr); align-items:center;
+      opacity:0; transform:translateY(15px) scale(.98);
+      transition:opacity .45s ease,transform .45s ease;
+      filter:drop-shadow(0 14px 28px rgba(0,0,0,.42));
+    }
+    .widget.visible { opacity:1; transform:translateY(0) scale(1); }
+    .widget.change { animation:songChange .55s ease; }
+    @keyframes songChange {
+      0% { opacity:.3; transform:translateX(12px) scale(.98); }
+      100% { opacity:1; transform:translateX(0) scale(1); }
+    }
+    .art-wrap {
+      position:relative; z-index:3; width:106px; height:82px;
+      border-radius:13px; padding:3px;
+      background:linear-gradient(135deg,var(--aqua),var(--blue),var(--purple));
+      box-shadow:0 0 16px rgba(46,231,210,.38),0 0 28px rgba(124,58,237,.28);
+    }
+    .art { width:100%; height:100%; display:block; object-fit:cover; border-radius:10px; background:#111; }
+    .note {
+      position:absolute; right:-9px; bottom:-9px; width:29px; height:29px;
+      display:grid; place-items:center; border-radius:50%;
+      background:linear-gradient(135deg,var(--aqua),var(--blue)); color:#07101a;
+      font-size:16px; font-weight:900; box-shadow:0 0 13px rgba(46,231,210,.55);
+    }
+    .panel {
+      position:relative; min-width:0; min-height:98px; margin-left:-17px;
+      padding:14px 18px 14px 34px; display:flex; flex-direction:column; justify-content:center;
+      overflow:hidden; border-radius:0 14px 14px 0;
+      background:linear-gradient(105deg,rgba(0,0,0,.72),rgba(8,12,29,.68));
+      border:1px solid rgba(255,255,255,.12); border-left:0;
+      box-shadow:inset 0 0 22px rgba(76,125,255,.06);
+    }
+    .panel::before {
+      content:""; position:absolute; inset:0; pointer-events:none;
+      background:linear-gradient(90deg,rgba(46,231,210,.13),transparent 34%,rgba(124,58,237,.12));
+    }
+    .panel::after {
+      content:""; position:absolute; left:0; right:0; bottom:0; height:3px;
+      background:linear-gradient(90deg,var(--aqua),var(--blue),var(--purple));
+      box-shadow:0 0 10px rgba(46,231,210,.58);
+    }
+    .eyebrow,.title,.requester { position:relative; z-index:1; }
+    .eyebrow { display:flex; align-items:center; gap:7px; margin-bottom:5px; color:var(--aqua); font-size:11px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; }
+    .bars { display:inline-flex; align-items:flex-end; gap:2px; height:11px; }
+    .bars i { width:3px; border-radius:2px; background:var(--aqua); animation:bar .8s ease-in-out infinite alternate; }
+    .bars i:nth-child(1){height:5px}.bars i:nth-child(2){height:10px;animation-delay:.2s}.bars i:nth-child(3){height:7px;animation-delay:.4s}
+    @keyframes bar { to { height:3px; opacity:.55; } }
+    .paused .bars i { animation-play-state:paused; height:3px; }
+    .title { font-size:18px; line-height:1.18; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 1px 8px rgba(0,0,0,.8); }
+    .requester { margin-top:5px; color:rgba(255,255,255,.76); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .paused .eyebrow { color:#fbbf24; }
+  </style>
+</head>
+<body>
+  <section class="widget" id="widget" aria-live="polite">
+    <div class="art-wrap">
+      <img class="art" id="art" alt="Portada de la canción">
+      <span class="note">♫</span>
+    </div>
+    <div class="panel">
+      <div class="eyebrow"><span class="bars"><i></i><i></i><i></i></span><span id="state">Ahora suena</span></div>
+      <div class="title" id="title">—</div>
+      <div class="requester" id="requester"></div>
+    </div>
+  </section>
+
+  <script>
+    const widget=document.getElementById('widget');
+    const art=document.getElementById('art');
+    const title=document.getElementById('title');
+    const requester=document.getElementById('requester');
+    const state=document.getElementById('state');
+    let currentId=null;
+    const fallbackArt='data:image/svg+xml;charset=UTF-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2ee7d2"/><stop offset=".5" stop-color="#4c7dff"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs><rect width="320" height="180" fill="#080b18"/><circle cx="160" cy="90" r="58" fill="url(#g)" opacity=".9"/><circle cx="160" cy="90" r="25" fill="#080b18"/><path d="M148 54v62a21 21 0 1 1-10-18V66l50-12v51a21 21 0 1 1-10-18V42z" fill="#fff"/></svg>');
+
+    async function update(){
+      try{
+        const [songResponse,playbackResponse,fallbackResponse]=await Promise.all([
+          fetch('/api/song-request/current',{cache:'no-store'}),
+          fetch('/api/song-request/playback',{cache:'no-store'}),
+          fetch('/api/song-request/fallback-playlist',{cache:'no-store'})
+        ]);
+        if(!songResponse.ok)throw new Error('song_request_failed');
+        const songData=await songResponse.json();
+        const playbackData=playbackResponse.ok?await playbackResponse.json():{paused:false};
+        const fallbackData=fallbackResponse.ok?await fallbackResponse.json():{playlist:null};
+        const song=songData.current;
+
+        if(song){
+          const changed=String(song.id)!==String(currentId);
+          currentId=song.id;
+          art.src=song.thumbnailUrl||`https://i.ytimg.com/vi/${song.youtubeId}/hqdefault.jpg`;
+          title.textContent=song.title||'Canción de YouTube';
+          requester.textContent=`Pedida por ${song.requesterDisplayName||song.requestedBy||'usuario'}`;
+          if(changed){widget.classList.remove('change');void widget.offsetWidth;widget.classList.add('change');}
+        }else if(fallbackData.playlist?.playlistId){
+          const fallbackId=`fallback:${fallbackData.playlist.playlistId}`;
+          const changed=fallbackId!==String(currentId);
+          currentId=fallbackId;
+          art.src=fallbackArt;
+          title.textContent='Música de respaldo';
+          requester.textContent='Playlist automática del canal';
+          if(changed){widget.classList.remove('change');void widget.offsetWidth;widget.classList.add('change');}
+        }else{
+          widget.classList.remove('visible');currentId=null;return;
+        }
+        title.title=title.textContent;
+        widget.classList.toggle('paused',playbackData.paused===true);
+        state.textContent=playbackData.paused===true?'En pausa':'Ahora suena';
+        widget.classList.add('visible');
+      }catch(error){
+        console.error('No se pudo actualizar el widget musical:',error);
+      }
+    }
+    update();
+    setInterval(update,2000);
+  </script>
+</body>
+</html>

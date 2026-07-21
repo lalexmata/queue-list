@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  <title>Admin Song Requests</title>
+  <style>
+    .wrap { max-width:1040px; position:relative; z-index:1; }
+    .layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr); gap:16px; }
+    .header,.controls,.request-row,.song-row,.song-main { display:flex; align-items:center; gap:10px; }
+    .header { justify-content:space-between; flex-wrap:wrap; margin-bottom:14px; }
+    h1,h2,p { margin:0; } h1 { font-size:21px; } h2 { font-size:16px; margin-bottom:12px; }
+    .muted { color:var(--muted); font-size:13px; }
+    .player-shell { position:relative; aspect-ratio:16/9; width:100%; overflow:hidden; border-radius:14px; background:#050505; }
+    #player,#player iframe { width:100%; height:100%; }
+    .placeholder { position:absolute; inset:0; display:grid; place-content:center; text-align:center; color:var(--muted); padding:20px; }
+    .now { margin:12px 0; min-height:42px; } .now strong { display:block; margin-bottom:3px; }
+    .controls,.request-row { flex-wrap:wrap; }
+    .volume-control { display:flex; align-items:center; gap:8px; width:100%; margin-top:4px; }
+    .volume-control input { min-width:120px; padding:0; }
+    .request-box { margin:14px 0; padding:14px; border:1px solid rgba(255,255,255,.09); border-radius:14px; background:rgba(255,255,255,.025); }
+    .request-box h2 { margin-bottom:8px; }
+    input { min-width:220px; flex:1; color:#fff; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px 12px; }
+    .queue { list-style:none; padding:0; margin:0; max-height:650px; overflow:auto; }
+    .song-row { justify-content:space-between; padding:10px 0; border-bottom:1px solid rgba(255,255,255,.09); }
+    .song-main { min-width:0; align-items:flex-start; } .thumb { width:76px; aspect-ratio:16/9; object-fit:cover; border-radius:8px; background:#080808; flex:none; }
+    .song-copy { min-width:0; } .song-title { font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .playing { color:var(--brandA); font-size:11px; font-weight:900; margin-bottom:3px; }
+    .empty { color:var(--muted); padding:24px 0; text-align:center; }
+    .status { min-height:18px; margin-top:10px; font-size:12px; color:var(--muted); } .status.error { color:#fca5a5; }
+    a { color:#fff; text-decoration:none; }
+    @media (max-width:780px) { .layout { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body class="app-bg">
+  <main class="wrap">
+    <div class="header">
+      <div><h1>🎵 Song Requests</h1><p class="muted">Reproductor y cola de YouTube</p></div>
+      <a class="btn" href="/admin">← Volver al admin</a>
+    </div>
+    <div class="layout">
+      <section class="card">
+        <h2>Reproductor</h2>
+        <div class="player-shell"><div id="player"></div><div class="placeholder" id="placeholder">Selecciona “Reproducir cola” para comenzar.</div></div>
+        <div class="now" id="now"><span class="muted">No hay una canción reproduciéndose.</span></div>
+        <form class="request-box" id="request-form">
+          <h2>Agregar canción</h2>
+          <div class="request-row">
+            <input id="youtube-url" type="text" autocomplete="off" required placeholder="Nombre de una canción o enlace de YouTube">
+            <button class="btn btn-primary" id="add-song" type="submit">＋ Agregar</button>
+          </div>
+          <p class="muted" style="margin-top:8px">Se registrará como una solicitud agregada por moderación.</p>
+        </form>
+        <form class="request-box" id="playlist-form">
+          <h2>Playlist de respaldo</h2>
+          <div class="request-row">
+            <input id="playlist-url" type="text" inputmode="url" autocomplete="off" placeholder="URL de una playlist de YouTube">
+            <button class="btn" id="save-playlist" type="submit">Guardar playlist</button>
+          </div>
+          <p class="muted" style="margin-top:8px">Sonará solamente cuando no haya solicitudes. Deja el campo vacío para desactivarla.</p>
+        </form>
+        <div class="controls">
+          <button class="btn btn-primary" id="play" type="button">▶ Reproducir cola</button>
+          <button class="btn" id="pause" type="button">⏸ Pausar</button>
+          <button class="btn" id="skip" type="button">⏭ Saltar</button>
+          <button class="btn" id="refresh" type="button">↻ Actualizar</button>
+          <button class="btn btn-danger" id="clear" type="button">Vaciar cola</button>
+          <label class="volume-control" for="volume"><span>🔊 Volumen</span><input id="volume" type="range" min="0" max="100" step="1" value="100"><strong id="volume-value">100%</strong></label>
+        </div>
+        <div class="status" id="status"></div>
+      </section>
+      <section class="card">
+        <h2 id="queue-title">Solicitudes</h2><ul class="queue" id="queue"></ul><div class="empty" id="empty">No hay canciones solicitadas.</div>
+      </section>
+    </div>
+  </main>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    const queueEl=document.getElementById('queue'), emptyEl=document.getElementById('empty');
+    const nowEl=document.getElementById('now'), statusEl=document.getElementById('status');
+    const placeholderEl=document.getElementById('placeholder');
+    const requestForm=document.getElementById('request-form'), youtubeUrlEl=document.getElementById('youtube-url');
+    const playlistForm=document.getElementById('playlist-form'), playlistUrlEl=document.getElementById('playlist-url');
+    const volumeEl=document.getElementById('volume'), volumeValueEl=document.getElementById('volume-value');
+    let player=null, playerReady=false, currentVideoId=null, currentSong=null, loadingNext=false, manuallyPaused=false;
+    let fallbackPlaylistId=null, fallbackActive=false, fallbackIndex=0;
+    function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function setStatus(message,error=false){statusEl.textContent=message;statusEl.classList.toggle('error',error);}
+    async function api(path,options={}){
+      const response=await fetch(path,{cache:'no-store',...options});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.error||'No se pudo completar la operación.');
+      return data;
+    }
+
+    window.onYouTubeIframeAPIReady=function(){
+      player=new YT.Player('player',{width:'100%',height:'100%',playerVars:{autoplay:1,controls:1,rel:0},events:{
+        onReady:()=>{playerReady=true;syncPlaybackState().then(loadQueue);},
+        onStateChange:event=>{
+          if(event.data===YT.PlayerState.ENDED&&!fallbackActive)playNext('played');
+          if(event.data===YT.PlayerState.PAUSED&&!manuallyPaused&&(currentSong||fallbackActive)){
+            setTimeout(()=>{if(playerReady&&!manuallyPaused)player.playVideo();},250);
+          }
+        },
+        onError:()=>{if(fallbackActive){player.nextVideo();return;}setStatus('YouTube no pudo reproducir este video. Saltando…',true);playNext('skipped');}
+      }});
+    };
+
+    async function loadFallbackConfig(){
+      try{
+        const data=await api('/api/song-request/fallback-playlist');
+        fallbackPlaylistId=data.playlist?.playlistId||null;
+        playlistUrlEl.value=data.playlist?.playlistUrl||'';
+      }catch(error){setStatus(error.message,true);}
+    }
+
+    async function syncVolume(){
+      try{
+        const data=await api('/api/song-request/volume');
+        const volume=Number(data.volume);volumeEl.value=String(volume);volumeValueEl.textContent=`${volume}%`;
+        if(playerReady&&player.getVolume()!==volume)player.setVolume(volume);
+      }catch(error){setStatus(error.message,true);}
+    }
+
+    async function syncPlaybackState(){
+      try{
+        const data=await api('/api/song-request/playback');
+        if(data.paused){
+          manuallyPaused=true;
+          if(playerReady){const state=player.getPlayerState();if(state===YT.PlayerState.PLAYING||state===YT.PlayerState.BUFFERING)player.pauseVideo();}
+        }else if(manuallyPaused){
+          manuallyPaused=false;
+          if(playerReady&&(currentSong||fallbackActive))player.playVideo();
+          else if(playerReady)loadQueue();
+        }
+      }catch(error){setStatus(error.message,true);}
+    }
+
+    async function saveVolume(){
+      const volume=Number(volumeEl.value);volumeValueEl.textContent=`${volume}%`;if(playerReady)player.setVolume(volume);
+      try{await api(`/api/song-request/volume?value=${volume}`);}catch(error){setStatus(error.message,true);}
+    }
+
+    function startFallback(){
+      if(!playerReady||!fallbackPlaylistId||fallbackActive)return;
+      currentSong=null;currentVideoId=null;fallbackActive=true;
+      placeholderEl.style.display='none';
+      nowEl.innerHTML='<strong>Playlist de respaldo</strong><span class="muted">No hay solicitudes pendientes.</span>';
+      player.loadPlaylist({list:fallbackPlaylistId,listType:'playlist',index:fallbackIndex,startSeconds:0});
+      player.setLoop(true);
+      if(manuallyPaused)setTimeout(()=>player.pauseVideo(),250);
+      setStatus('Reproduciendo la playlist de respaldo.');
+    }
+
+    function showCurrent(song){
+      currentSong=song;
+      if(!song){currentVideoId=null;nowEl.innerHTML='<span class="muted">No hay una canción reproduciéndose.</span>';placeholderEl.style.display='grid';return;}
+      nowEl.innerHTML=`<strong>${esc(song.title)}</strong><span class="muted">Solicitada por ${esc(song.requesterDisplayName)}</span>`;
+      placeholderEl.style.display='none';
+      if(playerReady&&song.youtubeId!==currentVideoId){currentVideoId=song.youtubeId;player.loadVideoById(song.youtubeId);if(manuallyPaused)setTimeout(()=>player.pauseVideo(),250);}
+    }
+
+    function renderQueue(items){
+      queueEl.innerHTML='';emptyEl.style.display=items.length?'none':'block';document.getElementById('queue-title').textContent=`Solicitudes (${items.length})`;
+      for(const song of items){
+        const li=document.createElement('li');li.className='song-row';
+        li.innerHTML=`<div class="song-main"><img class="thumb" src="${esc(song.thumbnailUrl)}" alt="" loading="lazy"><div class="song-copy">${song.status==='playing'?'<div class="playing">REPRODUCIENDO</div>':''}<div class="song-title" title="${esc(song.title)}">${esc(song.title)}</div><div class="muted">${esc(song.requesterDisplayName)} · ${esc(song.platform)}</div></div></div>${song.status==='queued'?`<button class="btn btn-danger btn-mini" data-delete="${song.id}" title="Eliminar">🗑</button>`:''}`;
+        const button=li.querySelector('[data-delete]');if(button)button.addEventListener('click',()=>removeSong(song));queueEl.appendChild(li);
+      }
+    }
+
+    async function loadQueue(){
+      try{
+        const data=await api('/api/song-request/queue'), items=data.queue||[];
+        const current=items.find(song=>song.status==='playing')||null;
+        renderQueue(items);
+        if(current){fallbackActive=false;showCurrent(current);return;}
+        if(items.some(song=>song.status==='queued')){
+          if(fallbackActive&&playerReady){const index=player.getPlaylistIndex();if(index>=0)fallbackIndex=index;player.stopVideo();fallbackActive=false;}
+          await playNext('played');return;
+        }
+        if(!fallbackActive){showCurrent(null);startFallback();}
+      }catch(error){setStatus(error.message,true);}
+    }
+    async function playNext(finishedAs='played'){
+      if(loadingNext)return;loadingNext=true;
+      try{const path=finishedAs==='skipped'?'/api/song-request/skip':'/api/song-request/next';const data=await api(path,{method:'POST'});showCurrent(data.current);setStatus(data.current?'Reproduciendo la siguiente canción.':'La cola terminó.');await loadQueue();}
+      catch(error){setStatus(error.message,true);}finally{loadingNext=false;}
+    }
+    async function startOrResume(){
+      try{
+        await api('/api/song-request/play');manuallyPaused=false;
+        if((currentSong||fallbackActive)&&playerReady){player.playVideo();setStatus('Reproducción reanudada.');return;}
+        playNext('played');
+      }catch(error){setStatus(error.message,true);}
+    }
+    async function pausePlayback(){
+      if(!playerReady){setStatus('El reproductor todavía se está cargando.',true);return;}
+      const state=player.getPlayerState();
+      if(state!==YT.PlayerState.PLAYING&&state!==YT.PlayerState.BUFFERING){setStatus('No hay música reproduciéndose.');return;}
+      try{await api('/api/song-request/pause');manuallyPaused=true;player.pauseVideo();setStatus('Reproducción pausada. Usa “Reproducir cola” para continuar.');}
+      catch(error){setStatus(error.message,true);}
+    }
+    function skipCurrent(){
+      if(fallbackActive&&playerReady){player.nextVideo();setStatus('Avanzando en la playlist de respaldo.');return;}
+      playNext('skipped');
+    }
+    async function removeSong(song){if(!confirm(`¿Eliminar “${song.title}” de la cola?`))return;try{await api(`/api/song-request/${song.id}`,{method:'DELETE'});await loadQueue();}catch(error){setStatus(error.message,true);}}
+    async function addSong(event){
+      event.preventDefault();
+      const input=youtubeUrlEl.value.trim();if(!input)return;
+      const button=document.getElementById('add-song');button.disabled=true;setStatus('Consultando información de YouTube…');
+      try{
+        const data=await api('/api/song-request/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:input,requestedBy:'moderacion',requesterDisplayName:'Moderación',platform:'admin'})});
+        youtubeUrlEl.value='';setStatus(`“${data.song.title}” fue agregada a la cola.`);await loadQueue();youtubeUrlEl.focus();
+      }catch(error){
+        const errorMessages={song_already_queued:'Esa canción ya está en la cola.',invalid_youtube_url:'El enlace de YouTube no es válido.',youtube_search_not_configured:'Falta configurar YOUTUBE_API_KEY en Railway.',youtube_search_failed:'YouTube no pudo completar la búsqueda.',youtube_video_not_found:'No se encontró una canción con ese nombre.',missing_song_input:'Escribe una canción o pega un enlace.'};
+        const message=errorMessages[error.message]||error.message;
+        setStatus(message,true);
+      }finally{button.disabled=false;}
+    }
+    async function savePlaylist(event){
+      event.preventDefault();
+      const button=document.getElementById('save-playlist');button.disabled=true;
+      try{
+        const data=await api('/api/song-request/fallback-playlist',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:playlistUrlEl.value.trim()})});
+        fallbackPlaylistId=data.playlist.playlistId||null;playlistUrlEl.value=data.playlist.playlistUrl||'';fallbackIndex=0;
+        if(fallbackActive&&playerReady){player.stopVideo();fallbackActive=false;}
+        setStatus(fallbackPlaylistId?'Playlist de respaldo guardada.':'Playlist de respaldo desactivada.');
+        await loadQueue();
+      }catch(error){
+        setStatus(error.message==='invalid_youtube_playlist_url'?'La URL de la playlist no es válida.':error.message,true);
+      }finally{button.disabled=false;}
+    }
+
+    requestForm.addEventListener('submit',addSong);
+    playlistForm.addEventListener('submit',savePlaylist);
+    document.getElementById('play').addEventListener('click',startOrResume);
+    document.getElementById('pause').addEventListener('click',pausePlayback);
+    document.getElementById('skip').addEventListener('click',skipCurrent);
+    document.getElementById('refresh').addEventListener('click',loadQueue);
+    volumeEl.addEventListener('input',()=>{volumeValueEl.textContent=`${volumeEl.value}%`;if(playerReady)player.setVolume(Number(volumeEl.value));});
+    volumeEl.addEventListener('change',saveVolume);
+    document.getElementById('clear').addEventListener('click',async()=>{if(!confirm('¿Vaciar toda la cola musical, incluida la canción actual?'))return;try{await api('/api/song-request/',{method:'DELETE'});if(playerReady)player.stopVideo();fallbackActive=false;showCurrent(null);await loadQueue();setStatus('Cola musical vaciada.');}catch(error){setStatus(error.message,true);}});
+    Promise.all([loadFallbackConfig(),syncPlaybackState()]).then(loadQueue);syncVolume();setInterval(loadQueue,10000);setInterval(syncVolume,2000);setInterval(syncPlaybackState,2000);
+  </script>
+</body>
+</html>
