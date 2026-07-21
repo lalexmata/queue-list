@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LALEX - Rotador de Redes V2</title>
+  <style>
+    :root {
+      --purple: #8b2cff;
+      --purple-soft: #c46cff;
+      --blue: #00cfff;
+      --blue-soft: #6be8ff;
+      --panel: rgba(4, 7, 22, 0.92);
+      --text: #ffffff;
+      --width: 900px;
+      --height: 170px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent !important;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .stage {
+      position: relative;
+      width: var(--width);
+      height: var(--height);
+      overflow: hidden;
+      background: transparent;
+      isolation: isolate;
+    }
+
+    /* Fondo HUD muy sutil, solo dentro del área del widget */
+    .hud-grid {
+      position: absolute;
+      inset: 18px 30px 18px 112px;
+      z-index: 0;
+      opacity: .14;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(0,207,255,.18) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139,44,255,.18) 1px, transparent 1px);
+      background-size: 26px 26px;
+      mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent);
+      animation: gridDrift 12s linear infinite;
+    }
+
+    @keyframes gridDrift {
+      from { background-position: 0 0, 0 0; }
+      to   { background-position: 52px 26px, 26px 52px; }
+    }
+
+    .card {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      align-items: center;
+      opacity: 0;
+      transform: translateX(115px) scale(.965);
+      filter: blur(7px);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .card.active { animation: enter .82s cubic-bezier(.16,.84,.32,1) forwards; }
+    .card.exit   { animation: exit .68s cubic-bezier(.55,.08,.68,.53) forwards; }
+
+    @keyframes enter {
+      0%   { opacity: 0; transform: translateX(115px) scale(.965); filter: blur(7px); }
+      68%  { opacity: 1; filter: blur(0); }
+      100% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+    }
+
+    @keyframes exit {
+      0%   { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+      100% { opacity: 0; transform: translateX(-125px) scale(.965); filter: blur(6px); }
+    }
+
+    .icon-box {
+      position: relative;
+      width: 150px;
+      height: 150px;
+      margin-left: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 35% 25%, color-mix(in srgb, var(--accent) 25%, transparent), transparent 45%),
+        linear-gradient(145deg, rgba(8,11,35,.985), rgba(4,6,20,.985));
+      border: 3px solid color-mix(in srgb, var(--accent) 72%, white 8%);
+      box-shadow:
+        0 0 18px color-mix(in srgb, var(--accent) 60%, transparent),
+        0 0 38px rgba(0,207,255,.25),
+        inset 0 0 22px rgba(139,44,255,.18);
+      z-index: 4;
+      animation: glowPulse 2.7s ease-in-out infinite;
+    }
+
+    .icon-box::before,
+    .icon-box::after {
+      content: "";
+      position: absolute;
+      border-radius: 20px;
+      pointer-events: none;
+    }
+
+    .icon-box::before {
+      inset: 8px;
+      border: 2px solid rgba(0,207,255,.34);
+    }
+
+    .icon-box::after {
+      inset: 1px;
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: inset 0 0 22px rgba(255,255,255,.05);
+    }
+
+    @keyframes glowPulse {
+      0%,100% {
+        box-shadow:
+          0 0 16px color-mix(in srgb, var(--accent) 55%, transparent),
+          0 0 32px rgba(0,207,255,.20),
+          inset 0 0 20px rgba(139,44,255,.16);
+      }
+      50% {
+        box-shadow:
+          0 0 26px color-mix(in srgb, var(--accent) 88%, transparent),
+          0 0 48px rgba(0,207,255,.38),
+          inset 0 0 28px rgba(139,44,255,.28);
+      }
+    }
+
+    .platform-icon {
+      width: 86px;
+      height: 86px;
+      filter: drop-shadow(0 0 11px currentColor);
+    }
+
+    .content {
+      position: relative;
+      height: 132px;
+      margin-left: -20px;
+      padding: 24px 54px 20px 82px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      background:
+        linear-gradient(90deg, rgba(10,12,34,.965), rgba(4,7,22,.945)),
+        radial-gradient(circle at 82% 50%, rgba(0,207,255,.10), transparent 45%);
+      clip-path: polygon(0 12%,5% 12%,7% 0,96% 0,100% 22%,96% 100%,7% 100%,4% 88%,0 88%);
+      border-top: 2px solid color-mix(in srgb, var(--accent) 85%, var(--purple));
+      border-bottom: 2px solid rgba(0,207,255,.88);
+      box-shadow:
+        0 0 20px color-mix(in srgb, var(--accent) 26%, transparent),
+        inset 0 0 25px rgba(0,207,255,.04);
+      overflow: hidden;
+      z-index: 3;
+    }
+
+    .content::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(105deg, transparent 0 68%, rgba(139,44,255,.16) 68% 71%, transparent 71% 74%, rgba(0,207,255,.14) 74% 77%, transparent 77%),
+        radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 35%);
+      pointer-events: none;
+    }
+
+    .content::after {
+      content: "";
+      position: absolute;
+      right: 30px;
+      bottom: 18px;
+      width: 88px;
+      height: 10px;
+      background: linear-gradient(90deg,
+        var(--purple) 0 18%, transparent 18% 26%,
+        var(--purple-soft) 26% 44%, transparent 44% 52%,
+        var(--blue) 52% 70%, transparent 70% 78%,
+        var(--blue-soft) 78% 100%);
+      transform: skewX(-28deg);
+      opacity: .92;
+      filter: drop-shadow(0 0 8px rgba(0,207,255,.65));
+    }
+
+    .platform {
+      position: relative;
+      z-index: 3;
+      margin: 0 0 2px;
+      font-size: 27px;
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: 1.2px;
+      font-style: italic;
+      text-transform: uppercase;
+      color: var(--accent);
+      text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 65%, transparent);
+    }
+
+    .username {
+      position: relative;
+      z-index: 3;
+      margin: 0;
+      font-size: 58px;
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: 1px;
+      font-style: italic;
+      text-transform: uppercase;
+      color: var(--text);
+      text-shadow: 0 2px 0 rgba(255,255,255,.1), 0 0 12px rgba(255,255,255,.12);
+      white-space: nowrap;
+    }
+
+    /* Barrido brillante principal */
+    .shine {
+      position: absolute;
+      top: -10%;
+      bottom: -10%;
+      left: -35%;
+      width: 18%;
+      z-index: 8;
+      pointer-events: none;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.78), transparent);
+      transform: skewX(-24deg);
+      filter: blur(3px);
+      opacity: 0;
+    }
+
+    .card.active .shine {
+      animation: shineSweep 1.15s ease .18s 1;
+    }
+
+    @keyframes shineSweep {
+      0%   { left: -35%; opacity: 0; }
+      18%  { opacity: .95; }
+      100% { left: 125%; opacity: 0; }
+    }
+
+    /* Destello pequeño en la esquina derecha */
+    .flare {
+      position: absolute;
+      right: 34px;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      transform: translateY(-50%);
+      z-index: 9;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow:
+        0 0 7px #fff,
+        0 0 14px var(--blue-soft),
+        0 0 28px var(--blue),
+        0 0 46px color-mix(in srgb, var(--accent) 70%, var(--blue));
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .flare::before,
+    .flare::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.95), transparent);
+      transform: translate(-50%, -50%);
+    }
+
+    .flare::before { width: 120px; height: 2px; }
+    .flare::after  { width: 2px; height: 62px; }
+
+    .card.active .flare {
+      animation: flarePulse 4.4s ease-in-out 1.4s infinite;
+    }
+
+    @keyframes flarePulse {
+      0%,78%,100% { opacity: 0; transform: translateY(-50%) scale(.5); }
+      84%         { opacity: 1; transform: translateY(-50%) scale(1.15); }
+      90%         { opacity: .2; transform: translateY(-50%) scale(.8); }
+    }
+
+    /* Partículas discretas */
+    .particles {
+      position: absolute;
+      inset: 0;
+      z-index: 7;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .particle {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 8px var(--blue), 0 0 12px var(--accent);
+      opacity: 0;
+      animation: floatUp var(--dur) ease-in-out var(--delay) infinite;
+    }
+
+    @keyframes floatUp {
+      0%   { opacity: 0; transform: translateY(18px) scale(.6); }
+      20%  { opacity: .8; }
+      70%  { opacity: .5; }
+      100% { opacity: 0; transform: translateY(-52px) scale(1.15); }
+    }
+
+    /* Destello breve durante el cambio */
+    .transition-flash {
+      position: absolute;
+      inset: 18px 28px 18px 115px;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,.75), rgba(0,207,255,.24) 25%, rgba(139,44,255,.10) 45%, transparent 72%);
+      mix-blend-mode: screen;
+      filter: blur(2px);
+    }
+
+    .transition-flash.fire {
+      animation: flash .45s ease-out 1;
+    }
+
+    @keyframes flash {
+      0%   { opacity: 0; transform: scale(.88); }
+      35%  { opacity: .85; }
+      100% { opacity: 0; transform: scale(1.08); }
+    }
+
+    @media (max-width: 920px) {
+      .stage {
+        transform: scale(calc(100vw / 920));
+        transform-origin: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="stage" id="stage">
+    <div class="hud-grid"></div>
+    <div class="transition-flash" id="transitionFlash"></div>
+  </main>
+
+  <script>
+    const CONFIG = {
+      intervalMs: 6000,
+      networks: [
+        {
+          platform: "TWITCH",
+          username: "lalexmata",
+          accent: "#a970ff",
+          icon: `<svg class="platform-icon" viewBox="0 0 64 64"><path fill="#a970ff" d="M12 8h44v31L43 52H31l-7 7v-7H12V8z"/><path fill="#111226" d="M18 14h32v22l-9 9H29l-6 6v-6h-5V14z"/><path fill="#fff" d="M27 21h5v13h-5zm11 0h5v13h-5z"/></svg>`
+        },
+        {
+          platform: "YOUTUBE",
+          username: "lalexmata",
+          accent: "#ff1f3d",
+          icon: `<svg class="platform-icon" viewBox="0 0 64 64"><rect x="5" y="14" width="54" height="36" rx="12" fill="#ff1f3d"/><path d="M27 23l16 9-16 9z" fill="#fff"/></svg>`
+        },
+        {
+          platform: "TIKTOK",
+          username: "lalexmata",
+          accent: "#ff3b8d",
+          icon: `<svg class="platform-icon" viewBox="0 0 64 64"><path fill="#00f2ea" d="M35 10h9c1 7 5 11 11 13v9c-5 0-9-2-12-5v15c0 10-8 17-18 17S8 52 8 42s8-18 18-18c2 0 4 0 6 1v10c-2-1-3-1-5-1-5 0-9 4-9 9s4 8 9 8 8-4 8-9V10z"/><path fill="#ff0050" opacity=".9" d="M32 8h9c1 7 5 11 11 13v9c-5 0-9-2-12-5v15c0 10-8 17-18 17-5 0-9-2-12-5 3 2 6 3 9 3 10 0 18-7 18-17V23c3 3 7 5 12 5v-5c-6-2-10-6-11-13h-6z"/><path fill="#fff" d="M34 10h7c1 6 4 9 9 11v6c-4-1-7-2-10-5v18c0 8-6 14-14 14s-14-6-14-14 6-14 14-14c2 0 3 0 5 1v7c-1-1-3-1-4-1-4 0-7 3-7 7s3 7 7 7 7-3 7-7V10z"/></svg>`
+        },
+        {
+          platform: "KICK",
+          username: "lalexmata",
+          accent: "#53fc18",
+          icon: `<svg class="platform-icon" viewBox="0 0 64 64"><path fill="#53fc18" d="M10 10h17v15h8V10h19v16H43v12h11v16H35V39h-8v15H10z"/></svg>`
+        },
+        {
+          platform: "X",
+          username: "lalexmata",
+          accent: "#caa7ff",
+          icon: `<svg class="platform-icon" viewBox="0 0 64 64"><path fill="#fff" d="M9 9h12l13 17L48 9h7L38 31l18 24H44L30 36 15 55H8l18-24z"/></svg>`
+        },
+        {
+          platform: "INSTAGRAM",
+          username: "lalexmata17",
+          accent: "#ff4fd8",
+          icon: `<svg class="platform-icon" viewBox="0 0 64 64"><defs><linearGradient id="ig" x1="0" y1="64" x2="64" y2="0"><stop offset="0" stop-color="#ffd600"/><stop offset=".35" stop-color="#ff7a00"/><stop offset=".68" stop-color="#ff0169"/><stop offset="1" stop-color="#d300c5"/></linearGradient></defs><rect x="7" y="7" width="50" height="50" rx="15" fill="url(#ig)"/><rect x="16" y="16" width="32" height="32" rx="10" fill="none" stroke="#fff" stroke-width="4"/><circle cx="32" cy="32" r="8" fill="none" stroke="#fff" stroke-width="4"/><circle cx="44" cy="20" r="3" fill="#fff"/></svg>`
+        }
+      ]
+    };
+
+    const stage = document.getElementById("stage");
+    const transitionFlash = document.getElementById("transitionFlash");
+
+    function particleMarkup() {
+      const specs = [
+        [16, 76, 3.6, .2], [31, 68, 4.2, 1.1], [47, 80, 3.9, .7],
+        [63, 72, 4.8, 1.6], [78, 84, 3.7, .4], [89, 65, 4.4, 1.9]
+      ];
+      return specs.map(([left, top, dur, delay]) =>
+        `<i class="particle" style="left:${left}%;top:${top}%;--dur:${dur}s;--delay:${delay}s"></i>`
+      ).join("");
+    }
+
+    function createCard(item, index) {
+      const card = document.createElement("section");
+      card.className = "card";
+      card.dataset.index = index;
+      card.style.setProperty("--accent", item.accent);
+      card.innerHTML = `
+        <div class="icon-box">${item.icon}</div>
+        <div class="content">
+          <div class="particles">${particleMarkup()}</div>
+          <div class="shine"></div>
+          <div class="flare"></div>
+          <p class="platform">${item.platform}</p>
+          <p class="username">${item.username}</p>
+        </div>
+      `;
+      return card;
+    }
+
+    const cards = CONFIG.networks.map(createCard);
+    cards.forEach(card => stage.appendChild(card));
+
+    let currentIndex = 0;
+
+    function showCard(index) {
+      cards.forEach(card => card.classList.remove("active", "exit"));
+      cards[index].classList.add("active");
+    }
+
+    function fireTransitionFlash() {
+      transitionFlash.classList.remove("fire");
+      void transitionFlash.offsetWidth;
+      transitionFlash.classList.add("fire");
+    }
+
+    function nextCard() {
+      const current = cards[currentIndex];
+      current.classList.remove("active");
+      current.classList.add("exit");
+      fireTransitionFlash();
+
+      currentIndex = (currentIndex + 1) % cards.length;
+
+      setTimeout(() => {
+        current.classList.remove("exit");
+        cards[currentIndex].classList.add("active");
+      }, 500);
+    }
+
+    showCard(currentIndex);
+    setInterval(nextCard, CONFIG.intervalMs);
+  </script>
+</body>
+</html>
