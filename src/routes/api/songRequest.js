@@ -164,6 +164,16 @@ router.all("/request", async (req, res) => {
     const message = `${song.requesterDisplayName}: “${song.title}” fue agregada a la cola${position ? ` en la posición ${position}` : ""}.`;
     res.status(201).json({ ok: true, message, position, song });
   } catch (error) {
+    // Streamer.bot no siempre expande las propiedades JSON de respuestas HTTP 4xx.
+    // Un duplicado es un resultado esperado, por lo que se responde con HTTP 200.
+    if (error?.message === "song_already_queued") {
+      return res.json({
+        ok: false,
+        status: "already_in_queue",
+        error: "song_already_queued",
+        message: "Esa canci\u00f3n ya est\u00e1 en la cola.",
+      });
+    }
     sendError(res, error);
   }
 });
