@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS song_requests (
   requested_by TEXT NOT NULL,
   requester_display_name TEXT NOT NULL,
   platform TEXT NOT NULL DEFAULT 'twitch',
+  sort_order BIGINT,
   status TEXT NOT NULL DEFAULT 'queued'
     CHECK (status IN ('queued', 'playing', 'played', 'skipped')),
   requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -16,6 +17,14 @@ CREATE TABLE IF NOT EXISTS song_requests (
 
 CREATE INDEX IF NOT EXISTS song_requests_active_order_idx
   ON song_requests (status, requested_at, id);
+
+ALTER TABLE song_requests
+  ADD COLUMN IF NOT EXISTS sort_order BIGINT;
+
+UPDATE song_requests SET sort_order = id WHERE sort_order IS NULL;
+
+CREATE INDEX IF NOT EXISTS song_requests_queue_order_idx
+  ON song_requests (status, sort_order, requested_at, id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS song_requests_unique_active_video_idx
   ON song_requests (youtube_id)

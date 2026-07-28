@@ -12,6 +12,7 @@ const {
   setPlaybackVolume,
   getPlaybackPaused,
   setPlaybackPaused,
+  reorderSongRequests,
 } = require("../../services/songRequest.service");
 
 const router = express.Router();
@@ -28,6 +29,8 @@ function sendError(res, error) {
     youtube_video_not_found: "No se encontró una canción con ese nombre.",
     song_already_queued: "Esa canción ya está en la cola.",
     db_error: "No se pudo procesar la solicitud musical.",
+    invalid_song_order: "El orden de las canciones no es válido.",
+    song_queue_changed: "La cola cambió mientras la ordenabas. Inténtalo nuevamente.",
     invalid_volume: "El volumen debe ser un número entre 0 y 100.",
   };
   return res.status(status).json({ ok: false, error: code, message: messages[code] || code });
@@ -197,6 +200,15 @@ router.all("/skip", async (_req, res) => {
       ? `Canción saltada. Ahora suena: ${current.title}.`
       : "Canción saltada. No quedan solicitudes.";
     res.json({ ok: true, message, current });
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+router.put("/reorder", async (req, res) => {
+  try {
+    const queue = await reorderSongRequests(req.body?.ids);
+    res.json({ ok: true, queue });
   } catch (error) {
     sendError(res, error);
   }

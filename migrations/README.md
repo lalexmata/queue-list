@@ -14,6 +14,12 @@
 psql $DATABASE_URL -f migrations/add_platform_column.sql
 ```
 
+Para habilitar el orden manual de las solicitudes musicales:
+
+```bash
+psql $DATABASE_URL -f migrations/add_song_request_order.sql
+```
+
 ## Verificar que la migración se aplicó correctamente:
 
 ```sql

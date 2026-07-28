@@ -11,6 +11,7 @@ const SONG_COLUMNS = `
   requester_display_name AS "requesterDisplayName",
   platform,
   status,
+  sort_order AS "sortOrder",
   requested_at AS "requestedAt",
   started_at AS "startedAt",
   finished_at AS "finishedAt"`;
@@ -86,8 +87,9 @@ async function addSongRequest({ input, requestedBy, requesterDisplayName, platfo
   try {
     const { rows } = await pool.query(
       `INSERT INTO song_requests
-        (youtube_id, youtube_url, title, thumbnail_url, requested_by, requester_display_name, platform)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+        (youtube_id, youtube_url, title, thumbnail_url, requested_by, requester_display_name, platform, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7,
+         (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM song_requests))
        RETURNING ${SONG_COLUMNS}`,
       [youtubeId, youtubeUrl, metadata.title, metadata.thumbnailUrl, requestedBy,
         requesterDisplayName || requestedBy, platform]
@@ -106,7 +108,8 @@ async function listSongRequests() {
     `SELECT ${SONG_COLUMNS}
      FROM song_requests
      WHERE status IN ('playing', 'queued')
-     ORDER BY CASE status WHEN 'playing' THEN 0 ELSE 1 END, requested_at ASC, id ASC`
+     ORDER BY CASE status WHEN 'playing' THEN 0 ELSE 1 END,
+              sort_order ASC NULLS LAST, requested_at ASC, id ASC`
   );
   return rows;
 }
@@ -132,7 +135,8 @@ async function advanceSong(currentStatus = "played") {
       `UPDATE song_requests SET status = 'playing', started_at = NOW()
        WHERE id = (
          SELECT id FROM song_requests WHERE status = 'queued'
-         ORDER BY requested_at ASC, id ASC FOR UPDATE SKIP LOCKED LIMIT 1
+         ORDER BY sort_order ASC NULLS LAST, requested_at ASC, id ASC
+         FOR UPDATE SKIP LOCKED LIMIT 1
        ) RETURNING ${SONG_COLUMNS}`
     );
     await client.query("COMMIT");
@@ -152,6 +156,46 @@ async function removeSongRequest(id) {
     [id]
   );
   return rows[0] || null;
+}
+
+async function reorderSongRequests(ids) {
+  if (!Array.isArray(ids) || ids.some(id => !/^\d+$/.test(String(id)))) {
+    throw Object.assign(new Error("invalid_song_order"), { status: 400 });
+  }
+  const normalizedIds = ids.map(String);
+  if (new Set(normalizedIds).size !== normalizedIds.length) {
+    throw Object.assign(new Error("invalid_song_order"), { status: 400 });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT id::text AS id FROM song_requests
+       WHERE status = 'queued'
+       ORDER BY sort_order ASC NULLS LAST, requested_at ASC, id ASC
+       FOR UPDATE`
+    );
+    const queuedIds = rows.map(row => row.id);
+    if (queuedIds.length !== normalizedIds.length ||
+        queuedIds.some(id => !normalizedIds.includes(id))) {
+      throw Object.assign(new Error("song_queue_changed"), { status: 409 });
+    }
+    await client.query(
+      `UPDATE song_requests AS song
+       SET sort_order = requested.position
+       FROM unnest($1::bigint[]) WITH ORDINALITY AS requested(id, position)
+       WHERE song.id = requested.id AND song.status = 'queued'`,
+      [normalizedIds]
+    );
+    await client.query("COMMIT");
+    return listSongRequests();
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function clearSongRequests() {
@@ -248,4 +292,5 @@ module.exports = {
   setPlaybackVolume,
   getPlaybackPaused,
   setPlaybackPaused,
+  reorderSongRequests,
 };

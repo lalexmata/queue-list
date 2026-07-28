@@ -6,8 +6,9 @@
   <link rel="stylesheet" href="/assets/css/styles.css">
   <title>Admin Song Requests</title>
   <style>
-    .wrap { max-width:1040px; position:relative; z-index:1; }
-    .layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr); gap:16px; }
+    .wrap { width:100%; max-width:1040px; position:relative; z-index:1; }
+    .layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr); gap:16px; min-width:0; }
+    .layout > *, .request-row > *, .song-row > * { min-width:0; }
     .header,.controls,.request-row,.song-row,.song-main { display:flex; align-items:center; gap:10px; }
     .header { justify-content:space-between; flex-wrap:wrap; margin-bottom:14px; }
     h1,h2,p { margin:0; } h1 { font-size:21px; } h2 { font-size:16px; margin-bottom:12px; }
@@ -15,22 +16,53 @@
     .player-shell { position:relative; aspect-ratio:16/9; width:100%; overflow:hidden; border-radius:14px; background:#050505; }
     #player,#player iframe { width:100%; height:100%; }
     .placeholder { position:absolute; inset:0; display:grid; place-content:center; text-align:center; color:var(--muted); padding:20px; }
-    .now { margin:12px 0; min-height:42px; } .now strong { display:block; margin-bottom:3px; }
+    .now { margin:12px 0; min-height:42px; min-width:0; } .now strong { display:block; margin-bottom:3px; overflow-wrap:anywhere; }
     .controls,.request-row { flex-wrap:wrap; }
     .volume-control { display:flex; align-items:center; gap:8px; width:100%; margin-top:4px; }
-    .volume-control input { min-width:120px; padding:0; }
+    .volume-control input { min-width:0; padding:0; }
     .request-box { margin:14px 0; padding:14px; border:1px solid rgba(255,255,255,.09); border-radius:14px; background:rgba(255,255,255,.025); }
     .request-box h2 { margin-bottom:8px; }
     input { min-width:220px; flex:1; color:#fff; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px 12px; }
-    .queue { list-style:none; padding:0; margin:0; max-height:650px; overflow:auto; }
+    .queue { list-style:none; padding:0; margin:0; max-height:650px; overflow-y:auto; overflow-x:hidden; }
     .song-row { justify-content:space-between; padding:10px 0; border-bottom:1px solid rgba(255,255,255,.09); }
-    .song-main { min-width:0; align-items:flex-start; } .thumb { width:76px; aspect-ratio:16/9; object-fit:cover; border-radius:8px; background:#080808; flex:none; }
-    .song-copy { min-width:0; } .song-title { font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .song-row[draggable="true"] { cursor:grab; }
+    .song-row.dragging { opacity:.38; }
+    .drag-handle { flex:none; border:0; color:var(--muted); background:transparent; font-size:20px; line-height:1; padding:8px 3px; cursor:grab; touch-action:none; }
+    .drag-handle:active { cursor:grabbing; }
+    .song-main { min-width:0; flex:1 1 auto; align-items:flex-start; overflow:hidden; } .thumb { width:76px; aspect-ratio:16/9; object-fit:cover; border-radius:8px; background:#080808; flex:none; }
+    .song-copy { min-width:0; flex:1 1 auto; overflow:hidden; } .song-title { max-width:100%; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .playing { color:var(--brandA); font-size:11px; font-weight:900; margin-bottom:3px; }
     .empty { color:var(--muted); padding:24px 0; text-align:center; }
     .status { min-height:18px; margin-top:10px; font-size:12px; color:var(--muted); } .status.error { color:#fca5a5; }
     a { color:#fff; text-decoration:none; }
-    @media (max-width:780px) { .layout { grid-template-columns:1fr; } }
+    @media (max-width:780px) {
+      body.app-bg { padding:12px; }
+      .layout { grid-template-columns:minmax(0,1fr); gap:12px; }
+      .card { padding:14px; border-radius:15px; }
+      .header { gap:10px; }
+      .request-row { flex-direction:column; align-items:stretch; }
+      .request-row input, .request-row .btn { width:100%; min-width:0; }
+      .controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+      .controls .btn { width:100%; padding-inline:8px; }
+      .volume-control { grid-column:1/-1; }
+      .queue { max-height:none; }
+    }
+    @media (max-width:420px) {
+      body.app-bg { padding:8px; }
+      .card { padding:11px; }
+      .header { align-items:stretch; }
+      .header > div { min-width:0; }
+      .header > .btn { width:100%; text-align:center; }
+      h1 { font-size:19px; }
+      .request-box { padding:10px; margin:12px 0; }
+      .song-row { gap:7px; padding:9px 0; }
+      .drag-handle { padding:8px 0; }
+      .thumb { width:58px; }
+      .song-title { font-size:14px; }
+      .song-copy .muted { font-size:11px; }
+      .song-row .btn-mini { padding:7px; }
+      .volume-control { gap:6px; font-size:13px; }
+    }
   </style>
 </head>
 <body class="app-bg">
@@ -84,6 +116,7 @@
     const playlistForm=document.getElementById('playlist-form'), playlistUrlEl=document.getElementById('playlist-url');
     const volumeEl=document.getElementById('volume'), volumeValueEl=document.getElementById('volume-value');
     let player=null, playerReady=false, currentVideoId=null, currentSong=null, loadingNext=false, manuallyPaused=false;
+    let reordering=false, draggedRow=null, pointerRow=null;
     let fallbackPlaylistId=null, fallbackActive=false, fallbackIndex=0;
     function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
     function setStatus(message,error=false){statusEl.textContent=message;statusEl.classList.toggle('error',error);}
@@ -164,13 +197,43 @@
     function renderQueue(items){
       queueEl.innerHTML='';emptyEl.style.display=items.length?'none':'block';document.getElementById('queue-title').textContent=`Solicitudes (${items.length})`;
       for(const song of items){
-        const li=document.createElement('li');li.className='song-row';
-        li.innerHTML=`<div class="song-main"><img class="thumb" src="${esc(song.thumbnailUrl)}" alt="" loading="lazy"><div class="song-copy">${song.status==='playing'?'<div class="playing">REPRODUCIENDO</div>':''}<div class="song-title" title="${esc(song.title)}">${esc(song.title)}</div><div class="muted">${esc(song.requesterDisplayName)} · ${esc(song.platform)}</div></div></div>${song.status==='queued'?`<button class="btn btn-danger btn-mini" data-delete="${song.id}" title="Eliminar">🗑</button>`:''}`;
+        const li=document.createElement('li');li.className='song-row';li.dataset.id=song.id;
+        if(song.status==='queued')li.draggable=true;
+        li.innerHTML=`${song.status==='queued'?'<button class="drag-handle" type="button" title="Arrastrar para cambiar de posición" aria-label="Arrastrar para cambiar de posición">⋮⋮</button>':''}<div class="song-main"><img class="thumb" src="${esc(song.thumbnailUrl)}" alt="" loading="lazy"><div class="song-copy">${song.status==='playing'?'<div class="playing">REPRODUCIENDO</div>':''}<div class="song-title" title="${esc(song.title)}">${esc(song.title)}</div><div class="muted">${esc(song.requesterDisplayName)} · ${esc(song.platform)}</div></div></div>${song.status==='queued'?`<button class="btn btn-danger btn-mini" data-delete="${song.id}" title="Eliminar">🗑</button>`:''}`;
         const button=li.querySelector('[data-delete]');if(button)button.addEventListener('click',()=>removeSong(song));queueEl.appendChild(li);
       }
     }
 
+    function queuedRows(){return [...queueEl.querySelectorAll('.song-row[draggable="true"]')];}
+    function moveRowAtPoint(row,x,y){
+      const target=document.elementFromPoint(x,y)?.closest('.song-row[draggable="true"]');
+      if(!target||target===row||target.parentElement!==queueEl)return;
+      const box=target.getBoundingClientRect();
+      queueEl.insertBefore(row,y<box.top+box.height/2?target:target.nextSibling);
+    }
+    async function saveQueueOrder(){
+      const ids=queuedRows().map(row=>row.dataset.id);reordering=true;
+      try{
+        await api('/api/song-request/reorder',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
+        setStatus('Nuevo orden guardado.');
+      }catch(error){setStatus(error.message,true);setTimeout(loadQueue,0);}
+      finally{reordering=false;}
+    }
+    queueEl.addEventListener('dragstart',event=>{
+      const row=event.target.closest('.song-row[draggable="true"]');if(!row)return;
+      draggedRow=row;reordering=true;row.classList.add('dragging');event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',row.dataset.id);
+    });
+    queueEl.addEventListener('dragover',event=>{if(!draggedRow)return;event.preventDefault();moveRowAtPoint(draggedRow,event.clientX,event.clientY);});
+    queueEl.addEventListener('dragend',async()=>{if(!draggedRow)return;draggedRow.classList.remove('dragging');draggedRow=null;await saveQueueOrder();});
+    queueEl.addEventListener('pointerdown',event=>{
+      if(event.pointerType==='mouse'||!event.target.closest('.drag-handle'))return;
+      pointerRow=event.target.closest('.song-row');reordering=true;pointerRow.classList.add('dragging');event.target.setPointerCapture(event.pointerId);event.preventDefault();
+    });
+    queueEl.addEventListener('pointermove',event=>{if(pointerRow)moveRowAtPoint(pointerRow,event.clientX,event.clientY);});
+    queueEl.addEventListener('pointerup',async()=>{if(!pointerRow)return;pointerRow.classList.remove('dragging');pointerRow=null;await saveQueueOrder();});
+
     async function loadQueue(){
+      if(reordering)return;
       try{
         const data=await api('/api/song-request/queue'), items=data.queue||[];
         const current=items.find(song=>song.status==='playing')||null;
