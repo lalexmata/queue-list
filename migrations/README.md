@@ -20,6 +20,12 @@ Para habilitar el orden manual de las solicitudes musicales:
 psql $DATABASE_URL -f migrations/add_song_request_order.sql
 ```
 
+Para crear el registro acumulativo de cupones para sorteos:
+
+```bash
+psql $DATABASE_URL -f migrations/add_giveaway_coupons.sql
+```
+
 ## Verificar que la migración se aplicó correctamente:
 
 ```sql

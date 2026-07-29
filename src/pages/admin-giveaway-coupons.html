@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cupones para sorteos</title>
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  <style>
+    body.app-bg { min-height:100vh; height:auto; }
+    .wrap { width:100%; max-width:980px; position:relative; z-index:1; }
+    .header, .summary, .form-row, .participant, .participant-main, .actions {
+      display:flex; align-items:center; gap:12px;
+    }
+    .header { justify-content:space-between; flex-wrap:wrap; margin-bottom:16px; }
+    h1, h2, p { margin:0; }
+    h1 { font-size:24px; }
+    h2 { font-size:17px; }
+    .back { color:var(--muted); text-decoration:none; font-size:13px; font-weight:800; }
+    .back:hover { color:#fff; }
+    .subtitle { color:var(--muted); font-size:13px; margin-top:6px; }
+    .summary { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); margin-bottom:16px; }
+    .stat { padding:16px; border-radius:15px; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.08); }
+    .stat strong { display:block; font-size:27px; color:var(--brandA); margin-bottom:2px; }
+    .stat span { color:var(--muted); font-size:12px; }
+    .form-card { margin-bottom:16px; }
+    .form-card h2 { margin-bottom:5px; }
+    .form-card > p { color:var(--muted); font-size:12px; margin-bottom:14px; }
+    .form-row { align-items:flex-end; }
+    label { display:grid; gap:6px; flex:1; min-width:0; color:var(--muted); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+    label.coupon-field { flex:0 0 145px; }
+    input, select, textarea {
+      width:100%; min-width:0; padding:11px 12px; color:#fff; background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12); border-radius:11px; font:inherit; outline:none;
+    }
+    textarea { min-height:130px; resize:vertical; line-height:1.45; }
+    input[type="file"] { padding:9px; color:var(--muted); }
+    select { color-scheme:dark; }
+    input:focus, select:focus, textarea:focus { border-color:var(--brandA); box-shadow:0 0 0 3px rgba(46,231,210,.1); }
+    .bulk-card { margin-bottom:16px; }
+    .bulk-card h2 { margin-bottom:5px; }
+    .bulk-card > p { color:var(--muted); font-size:12px; margin-bottom:14px; }
+    .bulk-source { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+    .bulk-options { display:grid; grid-template-columns:1fr 1fr auto; align-items:end; gap:12px; }
+    dialog {
+      width:min(620px, calc(100% - 24px)); padding:0; color:#fff; background:#111827;
+      border:1px solid rgba(255,255,255,.14); border-radius:18px; box-shadow:0 30px 80px rgba(0,0,0,.65);
+    }
+    dialog::backdrop { background:rgba(2,6,15,.78); backdrop-filter:blur(5px); }
+    .dialog-body { padding:20px; }
+    .dialog-header { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:14px; }
+    .dialog-header p { margin-top:5px; color:var(--muted); font-size:12px; }
+    .dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+    #wheelList { min-height:320px; font-family:ui-monospace, Consolas, monospace; font-size:13px; }
+    .list-card { padding-bottom:6px; }
+    .list-header { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; }
+    .status { min-height:18px; color:var(--muted); font-size:12px; }
+    .status.error { color:#fca5a5; }
+    .participants { list-style:none; padding:0; margin:0; }
+    .participant { justify-content:space-between; padding:14px 0; border-bottom:1px solid rgba(255,255,255,.08); }
+    .participant:last-child { border-bottom:0; }
+    .participant-main { min-width:0; }
+    .avatar {
+      display:grid; place-items:center; flex:0 0 42px; width:42px; height:42px; border-radius:13px;
+      background:linear-gradient(135deg, rgba(124,58,237,.5), rgba(76,125,255,.45));
+      font-size:17px; font-weight:900;
+    }
+    .identity { min-width:0; }
+    .identity strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .identity span { display:block; color:var(--muted); font-size:12px; margin-top:3px; }
+    .platform {
+      display:inline-flex; align-items:center; gap:5px; margin-top:5px; padding:3px 7px;
+      border-radius:999px; color:#fff; background:rgba(255,255,255,.07); font-size:10px;
+      font-weight:900; text-transform:uppercase; letter-spacing:.05em;
+    }
+    .coupon-control { display:flex; align-items:center; gap:7px; padding:5px; border-radius:12px; background:rgba(255,255,255,.045); }
+    .coupon-value { min-width:38px; text-align:center; font-weight:900; color:var(--brandA); }
+    .icon-btn { width:34px; height:34px; padding:0; }
+    .delete-btn { color:#fca5a5; }
+    .empty { padding:34px 10px; color:var(--muted); text-align:center; font-size:13px; }
+    @media (max-width:700px) {
+      body.app-bg { padding:12px; }
+      .card { padding:14px; }
+      .form-row { display:grid; grid-template-columns:1fr 110px; }
+      .form-row label:first-child { grid-column:1/-1; }
+      label.coupon-field { width:auto; }
+      .form-row .btn { grid-column:1/-1; width:100%; height:42px; }
+      .bulk-source, .bulk-options { grid-template-columns:1fr; }
+      .bulk-options .btn { width:100%; }
+      .participant { align-items:flex-start; flex-direction:column; }
+      .participant-main { width:100%; }
+      .actions { width:100%; justify-content:flex-end; }
+    }
+    @media (max-width:390px) {
+      .form-row { grid-template-columns:1fr; }
+      .form-row label:first-child { grid-column:auto; }
+      .form-row .btn { width:100%; }
+    }
+  </style>
+</head>
+<body class="app-bg">
+  <main class="wrap">
+      <div class="header">
+      <div>
+        <a class="back" href="/">← Centro de herramientas</a>
+        <h1>🎟️ Cupones para sorteos</h1>
+        <p class="subtitle">Registro acumulativo de canjes provenientes de cualquier plataforma.</p>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="getWheelList" type="button">🎡 Obtener lista para ruleta</button>
+        <button class="btn" id="refresh" type="button">Actualizar</button>
+      </div>
+    </div>
+
+    <section class="summary" aria-label="Resumen">
+      <div class="stat"><strong id="participantTotal">0</strong><span>Participantes</span></div>
+      <div class="stat"><strong id="couponTotal">0</strong><span>Cupones acumulados</span></div>
+    </section>
+
+    <section class="card form-card">
+      <h2>Agregar cupones</h2>
+      <p>Si el usuario ya existe, la cantidad indicada se sumará a sus cupones actuales.</p>
+      <form id="participantForm" class="form-row">
+        <label>
+          Nombre de usuario
+          <input id="username" name="username" maxlength="100" placeholder="@usuario" autocomplete="off" required>
+        </label>
+        <label>
+          Plataforma
+          <select id="platform" name="platform" required>
+            <option value="twitch">Twitch</option>
+            <option value="tiktok">TikTok</option>
+            <option value="youtube">YouTube</option>
+            <option value="kick">Kick</option>
+            <option value="facebook">Facebook</option>
+            <option value="instagram">Instagram</option>
+            <option value="discord">Discord</option>
+            <option value="other">Otra</option>
+          </select>
+        </label>
+        <label class="coupon-field">
+          Cantidad
+          <input id="couponCount" name="couponCount" type="number" min="1" max="1000000" value="1" required>
+        </label>
+        <button class="btn btn-primary" id="submitButton" type="submit">Agregar</button>
+      </form>
+      <div class="status" id="formStatus" role="status"></div>
+    </section>
+
+    <section class="card bulk-card">
+      <h2>Importación masiva</h2>
+      <p>Sube el CSV de suscriptores exportado desde Twitch o pega usuarios separados por líneas. Cada persona recibirá la cantidad seleccionada.</p>
+      <form id="bulkForm">
+        <div class="bulk-source">
+          <label>
+            Archivo CSV
+            <input id="bulkFile" type="file" accept=".csv,text/csv">
+          </label>
+          <label>
+            Lista manual
+            <textarea id="bulkText" placeholder="usuario_uno&#10;usuario_dos&#10;usuario_tres"></textarea>
+          </label>
+        </div>
+        <div class="bulk-options">
+          <label>
+            Plataforma
+            <select id="bulkPlatform" required>
+              <option value="twitch">Twitch</option>
+              <option value="tiktok">TikTok</option>
+              <option value="youtube">YouTube</option>
+              <option value="kick">Kick</option>
+              <option value="facebook">Facebook</option>
+              <option value="instagram">Instagram</option>
+              <option value="discord">Discord</option>
+              <option value="other">Otra</option>
+            </select>
+          </label>
+          <label>
+            Cupones por persona
+            <input id="bulkCouponCount" type="number" min="1" max="1000000" value="1" required>
+          </label>
+          <button class="btn btn-primary" id="bulkSubmitButton" type="submit">Importar participantes</button>
+        </div>
+      </form>
+      <div class="status" id="bulkStatus" role="status"></div>
+    </section>
+
+    <section class="card list-card">
+      <div class="list-header">
+        <h2>Participantes</h2>
+        <span class="status" id="listStatus" role="status"></span>
+      </div>
+      <ul class="participants" id="participants"></ul>
+      <div class="empty" id="empty">Todavía no hay participantes registrados.</div>
+    </section>
+  </main>
+
+  <dialog id="wheelDialog">
+    <div class="dialog-body">
+      <div class="dialog-header">
+        <div>
+          <h2>Lista para Spin the Wheel</h2>
+          <p id="wheelSummary">Cada línea representa un cupón.</p>
+        </div>
+        <button class="btn icon-btn" id="closeWheelDialog" type="button" aria-label="Cerrar">×</button>
+      </div>
+      <textarea id="wheelList" readonly aria-label="Participantes para la ruleta"></textarea>
+      <div class="dialog-actions">
+        <button class="btn" id="closeWheelDialogBottom" type="button">Cerrar</button>
+        <button class="btn btn-primary" id="copyWheelList" type="button">Copiar lista</button>
+      </div>
+      <div class="status" id="wheelStatus" role="status"></div>
+    </div>
+  </dialog>
+
+  <script>
+    const listEl = document.getElementById("participants");
+    const emptyEl = document.getElementById("empty");
+    const listStatusEl = document.getElementById("listStatus");
+    const formStatusEl = document.getElementById("formStatus");
+    const formEl = document.getElementById("participantForm");
+    const submitButton = document.getElementById("submitButton");
+    const bulkFormEl = document.getElementById("bulkForm");
+    const bulkFileEl = document.getElementById("bulkFile");
+    const bulkTextEl = document.getElementById("bulkText");
+    const bulkStatusEl = document.getElementById("bulkStatus");
+    const bulkSubmitButton = document.getElementById("bulkSubmitButton");
+    const wheelDialog = document.getElementById("wheelDialog");
+    const wheelListEl = document.getElementById("wheelList");
+    const wheelStatusEl = document.getElementById("wheelStatus");
+    let currentParticipants = [];
+    let busy = false;
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, character => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[character]);
+    }
+
+    function initials(value) {
+      return String(value || "?").trim().slice(0, 2).toUpperCase();
+    }
+
+    const platformInfo = {
+      twitch: ["🟣", "Twitch"],
+      tiktok: ["⚫", "TikTok"],
+      youtube: ["🔴", "YouTube"],
+      kick: ["🟢", "Kick"],
+      facebook: ["🔵", "Facebook"],
+      instagram: ["🟠", "Instagram"],
+      discord: ["🟦", "Discord"],
+      other: ["🌐", "Otra"],
+    };
+
+    async function request(url, options) {
+      const response = await fetch(url, {
+        ...options,
+        headers: { "Content-Type": "application/json", ...(options && options.headers) },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.ok === false) {
+        if (response.status === 404 && url === "/api/giveaway-coupons/bulk") {
+          throw new Error("La API de importación todavía no está activa. Reinicia el servidor y vuelve a intentarlo.");
+        }
+        throw new Error(data.message || "No se pudo completar la operación.");
+      }
+      return data;
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let field = "";
+      let quoted = false;
+      const source = String(text || "").replace(/^\uFEFF/, "");
+      for (let index = 0; index < source.length; index += 1) {
+        const character = source[index];
+        if (character === '"') {
+          if (quoted && source[index + 1] === '"') {
+            field += '"';
+            index += 1;
+          } else {
+            quoted = !quoted;
+          }
+        } else if (character === "," && !quoted) {
+          row.push(field.trim());
+          field = "";
+        } else if ((character === "\n" || character === "\r") && !quoted) {
+          if (character === "\r" && source[index + 1] === "\n") index += 1;
+          row.push(field.trim());
+          if (row.some(Boolean)) rows.push(row);
+          row = [];
+          field = "";
+        } else {
+          field += character;
+        }
+      }
+      row.push(field.trim());
+      if (row.some(Boolean)) rows.push(row);
+      return rows;
+    }
+
+    function participantsFromCsv(text) {
+      const rows = parseCsv(text);
+      if (!rows.length) return [];
+      const normalizeHeader = value => String(value).trim().toLowerCase().replace(/[_-]+/g, " ");
+      const headers = rows[0].map(normalizeHeader);
+      const usernameHeaders = ["user login", "username", "login", "usuario", "user"];
+      const displayHeaders = ["user name", "display name", "nombre", "nickname"];
+      const usernameIndex = headers.findIndex(header => usernameHeaders.includes(header));
+      const displayIndex = headers.findIndex(header => displayHeaders.includes(header));
+
+      if (usernameIndex >= 0) {
+        return rows.slice(1).map(row => ({
+          username: row[usernameIndex],
+          displayName: displayIndex >= 0 ? row[displayIndex] : row[usernameIndex],
+        })).filter(item => item.username);
+      }
+
+      // Un archivo/listado sin cabecera usa la primera columna.
+      return rows.map(row => ({ username: row[0], displayName: row[0] })).filter(item => item.username);
+    }
+
+    function participantsFromLines(text) {
+      return String(text || "").split(/\r?\n/)
+        .map(line => line.trim().split(/[,\t;]/)[0].trim())
+        .filter(Boolean)
+        .map(username => ({ username, displayName: username.replace(/^@/, "") }));
+    }
+
+    function renderParticipant(participant) {
+      const platform = platformInfo[participant.platform] || platformInfo.other;
+      const item = document.createElement("li");
+      item.className = "participant";
+      item.innerHTML = `
+        <div class="participant-main">
+          <span class="avatar">${escapeHtml(initials(participant.displayName))}</span>
+          <div class="identity">
+            <strong>${escapeHtml(participant.displayName)}</strong>
+            <span>@${escapeHtml(participant.username)}</span>
+            <small class="platform">${platform[0]} ${escapeHtml(platform[1])}</small>
+          </div>
+        </div>
+        <div class="actions">
+          <div class="coupon-control" aria-label="Cantidad de cupones">
+            <button class="btn icon-btn" data-change="-1" type="button" title="Restar un cupón">−</button>
+            <span class="coupon-value">${Number(participant.couponCount)}</span>
+            <button class="btn icon-btn" data-change="1" type="button" title="Sumar un cupón">+</button>
+          </div>
+          <button class="btn icon-btn delete-btn" data-delete type="button" title="Eliminar participante">🗑</button>
+        </div>`;
+
+      item.querySelectorAll("[data-change]").forEach(button => {
+        button.addEventListener("click", () => changeCount(
+          participant,
+          Number(participant.couponCount) + Number(button.dataset.change)
+        ));
+      });
+      item.querySelector("[data-delete]").addEventListener("click", () => removeParticipant(participant));
+      return item;
+    }
+
+    async function loadParticipants() {
+      listStatusEl.textContent = "Cargando…";
+      listStatusEl.classList.remove("error");
+      try {
+        const data = await request("/api/giveaway-coupons");
+        currentParticipants = data.participants;
+        listEl.innerHTML = "";
+        data.participants.forEach(participant => listEl.appendChild(renderParticipant(participant)));
+        emptyEl.style.display = data.participants.length ? "none" : "block";
+        document.getElementById("participantTotal").textContent = data.totalParticipants;
+        document.getElementById("couponTotal").textContent = data.totalCoupons;
+        listStatusEl.textContent = `${data.totalCoupons} cupón(es)`;
+      } catch (error) {
+        listStatusEl.textContent = error.message;
+        listStatusEl.classList.add("error");
+      }
+    }
+
+    async function changeCount(participant, count) {
+      if (busy || count < 0) return;
+      busy = true;
+      try {
+        await request(`/api/giveaway-coupons/${participant.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ couponCount: count }),
+        });
+        await loadParticipants();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        busy = false;
+      }
+    }
+
+    async function removeParticipant(participant) {
+      if (busy || !confirm(`¿Eliminar a ${participant.displayName} y todos sus cupones?`)) return;
+      busy = true;
+      try {
+        await request(`/api/giveaway-coupons/${participant.id}`, { method: "DELETE" });
+        await loadParticipants();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        busy = false;
+      }
+    }
+
+    formEl.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (busy) return;
+      busy = true;
+      submitButton.disabled = true;
+      formStatusEl.classList.remove("error");
+      formStatusEl.textContent = "Guardando…";
+      try {
+        const username = document.getElementById("username").value.trim();
+        const platform = document.getElementById("platform").value;
+        const couponCount = Number(document.getElementById("couponCount").value);
+        const data = await request("/api/giveaway-coupons/redeem", {
+          method: "POST",
+          body: JSON.stringify({ username, displayName: username.replace(/^@/, ""), platform, couponCount }),
+        });
+        formStatusEl.textContent = data.message;
+        formEl.reset();
+        document.getElementById("couponCount").value = 1;
+        document.getElementById("username").focus();
+        await loadParticipants();
+      } catch (error) {
+        formStatusEl.classList.add("error");
+        formStatusEl.textContent = error.message;
+      } finally {
+        busy = false;
+        submitButton.disabled = false;
+      }
+    });
+
+    bulkFileEl.addEventListener("change", () => {
+      const file = bulkFileEl.files[0];
+      bulkStatusEl.classList.remove("error");
+      bulkStatusEl.textContent = file ? `Archivo seleccionado: ${file.name}` : "";
+    });
+
+    bulkFormEl.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (busy) return;
+      busy = true;
+      bulkSubmitButton.disabled = true;
+      bulkStatusEl.classList.remove("error");
+      bulkStatusEl.textContent = "Leyendo participantes…";
+      try {
+        const file = bulkFileEl.files[0];
+        const sourceParticipants = file
+          ? participantsFromCsv(await file.text())
+          : participantsFromLines(bulkTextEl.value);
+        const platform = document.getElementById("bulkPlatform").value;
+        const couponCount = Number(document.getElementById("bulkCouponCount").value);
+
+        // Evita sumar dos veces al mismo usuario si está repetido dentro del archivo.
+        const uniqueParticipants = Array.from(new Map(
+          sourceParticipants.map(item => [
+            item.username.replace(/^@/, "").toLowerCase(),
+            { ...item, platform, couponCount },
+          ])
+        ).values());
+
+        if (!uniqueParticipants.length) throw new Error("No se encontraron participantes en la lista.");
+        bulkStatusEl.textContent = `Importando ${uniqueParticipants.length} participante(s)…`;
+        const data = await request("/api/giveaway-coupons/bulk", {
+          method: "POST",
+          body: JSON.stringify({ participants: uniqueParticipants }),
+        });
+        bulkStatusEl.textContent = data.message;
+        bulkFormEl.reset();
+        document.getElementById("bulkCouponCount").value = 1;
+        await loadParticipants();
+      } catch (error) {
+        bulkStatusEl.classList.add("error");
+        bulkStatusEl.textContent = error.message;
+      } finally {
+        busy = false;
+        bulkSubmitButton.disabled = false;
+      }
+    });
+
+    document.getElementById("refresh").addEventListener("click", loadParticipants);
+
+    function buildWheelList() {
+      const names = [];
+      currentParticipants.forEach(participant => {
+        for (let coupon = 0; coupon < Number(participant.couponCount); coupon += 1) {
+          names.push(participant.displayName || participant.username);
+        }
+      });
+      return names.join("\n");
+    }
+
+    async function copyWheelList() {
+      if (!wheelListEl.value) return;
+      wheelStatusEl.classList.remove("error");
+      try {
+        await navigator.clipboard.writeText(wheelListEl.value);
+        wheelStatusEl.textContent = "Lista copiada. Ya puedes pegarla en la ruleta.";
+      } catch (_error) {
+        wheelListEl.focus();
+        wheelListEl.select();
+        const copied = document.execCommand("copy");
+        wheelStatusEl.textContent = copied
+          ? "Lista copiada. Ya puedes pegarla en la ruleta."
+          : "Selecciona el texto y cópialo manualmente.";
+      }
+    }
+
+    document.getElementById("getWheelList").addEventListener("click", async () => {
+      const list = buildWheelList();
+      if (!list) return alert("No hay cupones para generar la lista.");
+      wheelListEl.value = list;
+      const entries = list.split("\n").length;
+      document.getElementById("wheelSummary").textContent =
+        `${entries} entrada(s). Cada línea representa un cupón.`;
+      wheelStatusEl.textContent = "";
+      wheelDialog.showModal();
+      await copyWheelList();
+    });
+
+    document.getElementById("copyWheelList").addEventListener("click", copyWheelList);
+    document.getElementById("closeWheelDialog").addEventListener("click", () => wheelDialog.close());
+    document.getElementById("closeWheelDialogBottom").addEventListener("click", () => wheelDialog.close());
+    wheelDialog.addEventListener("click", event => {
+      if (event.target === wheelDialog) wheelDialog.close();
+    });
+
+    loadParticipants();
+  </script>
+</body>
+</html>
