@@ -53,6 +53,8 @@
     #wheelList { min-height:320px; font-family:ui-monospace, Consolas, monospace; font-size:13px; }
     .list-card { padding-bottom:6px; }
     .list-header { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; }
+    .list-tools { display:flex; align-items:center; gap:10px; }
+    .search { width:min(280px, 100%); }
     .status { min-height:18px; color:var(--muted); font-size:12px; }
     .status.error { color:#fca5a5; }
     .participants { list-style:none; padding:0; margin:0; }
@@ -89,6 +91,8 @@
       .participant { align-items:flex-start; flex-direction:column; }
       .participant-main { width:100%; }
       .actions { width:100%; justify-content:flex-end; }
+      .list-header { align-items:stretch; flex-direction:column; }
+      .list-tools, .search { width:100%; }
     }
     @media (max-width:390px) {
       .form-row { grid-template-columns:1fr; }
@@ -187,7 +191,10 @@
     <section class="card list-card">
       <div class="list-header">
         <h2>Participantes</h2>
-        <span class="status" id="listStatus" role="status"></span>
+        <div class="list-tools">
+          <input class="search" id="participantSearch" type="search" placeholder="Buscar participante…" aria-label="Buscar participante">
+          <span class="status" id="listStatus" role="status"></span>
+        </div>
       </div>
       <ul class="participants" id="participants"></ul>
       <div class="empty" id="empty">Todavía no hay participantes registrados.</div>
@@ -227,6 +234,7 @@
     const wheelDialog = document.getElementById("wheelDialog");
     const wheelListEl = document.getElementById("wheelList");
     const wheelStatusEl = document.getElementById("wheelStatus");
+    const participantSearchEl = document.getElementById("participantSearch");
     let currentParticipants = [];
     let busy = false;
 
@@ -346,6 +354,7 @@
             <span class="coupon-value">${Number(participant.couponCount)}</span>
             <button class="btn icon-btn" data-change="1" type="button" title="Sumar un cupón">+</button>
           </div>
+          <button class="btn icon-btn" data-edit type="button" title="Editar nombre visible">✏️</button>
           <button class="btn icon-btn delete-btn" data-delete type="button" title="Eliminar participante">🗑</button>
         </div>`;
 
@@ -355,8 +364,27 @@
           Number(participant.couponCount) + Number(button.dataset.change)
         ));
       });
+      item.querySelector("[data-edit]").addEventListener("click", () => editDisplayName(participant));
       item.querySelector("[data-delete]").addEventListener("click", () => removeParticipant(participant));
       return item;
+    }
+
+    function renderParticipantList() {
+      const query = participantSearchEl.value.trim().toLocaleLowerCase("es");
+      const filtered = currentParticipants.filter(participant => {
+        const platform = platformInfo[participant.platform]?.[1] || participant.platform;
+        return [participant.displayName, participant.username, platform]
+          .some(value => String(value || "").toLocaleLowerCase("es").includes(query));
+      });
+      listEl.innerHTML = "";
+      filtered.forEach(participant => listEl.appendChild(renderParticipant(participant)));
+      emptyEl.style.display = filtered.length ? "none" : "block";
+      emptyEl.textContent = currentParticipants.length
+        ? "No se encontraron participantes con ese filtro."
+        : "Todavía no hay participantes registrados.";
+      listStatusEl.textContent = query
+        ? `${filtered.length} resultado(s)`
+        : `${currentParticipants.reduce((total, item) => total + Number(item.couponCount), 0)} cupón(es)`;
     }
 
     async function loadParticipants() {
@@ -365,12 +393,9 @@
       try {
         const data = await request("/api/giveaway-coupons");
         currentParticipants = data.participants;
-        listEl.innerHTML = "";
-        data.participants.forEach(participant => listEl.appendChild(renderParticipant(participant)));
-        emptyEl.style.display = data.participants.length ? "none" : "block";
+        renderParticipantList();
         document.getElementById("participantTotal").textContent = data.totalParticipants;
         document.getElementById("couponTotal").textContent = data.totalCoupons;
-        listStatusEl.textContent = `${data.totalCoupons} cupón(es)`;
       } catch (error) {
         listStatusEl.textContent = error.message;
         listStatusEl.classList.add("error");
@@ -384,6 +409,24 @@
         await request(`/api/giveaway-coupons/${participant.id}`, {
           method: "PUT",
           body: JSON.stringify({ couponCount: count }),
+        });
+        await loadParticipants();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        busy = false;
+      }
+    }
+
+    async function editDisplayName(participant) {
+      if (busy) return;
+      const displayName = prompt("Nombre que aparecerá en el listado y en la ruleta:", participant.displayName);
+      if (displayName === null || !displayName.trim() || displayName.trim() === participant.displayName) return;
+      busy = true;
+      try {
+        await request(`/api/giveaway-coupons/${participant.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ displayName: displayName.trim() }),
         });
         await loadParticipants();
       } catch (error) {
@@ -484,6 +527,7 @@
     });
 
     document.getElementById("refresh").addEventListener("click", loadParticipants);
+    participantSearchEl.addEventListener("input", renderParticipantList);
 
     function buildWheelList() {
       const names = [];

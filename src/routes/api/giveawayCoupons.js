@@ -5,6 +5,7 @@ const {
   listParticipants,
   removeParticipant,
   setCouponCount,
+  setDisplayName,
 } = require("../../services/giveawayCoupons.service");
 
 const router = express.Router();
@@ -18,6 +19,7 @@ function sendError(res, error) {
     invalid_platform: "Selecciona una plataforma válida.",
     invalid_participant_list: "La lista debe contener entre 1 y 5.000 participantes válidos.",
     invalid_coupon_count: "La cantidad de cupones debe ser un número entero válido.",
+    invalid_display_name: "Ingresa un nombre visible válido.",
     participant_not_found: "No se encontró al participante.",
     db_error: "No se pudo procesar la solicitud en la base de datos.",
   };
@@ -73,6 +75,21 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({ ok: false, error: "invalid_id" });
     }
     const participant = await setCouponCount(req.params.id, req.body?.couponCount);
+    if (!participant) {
+      return sendError(res, Object.assign(new Error("participant_not_found"), { status: 404 }));
+    }
+    res.json({ ok: true, participant });
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+router.patch("/:id", async (req, res) => {
+  try {
+    if (!/^\d+$/.test(req.params.id)) {
+      return res.status(400).json({ ok: false, error: "invalid_id" });
+    }
+    const participant = await setDisplayName(req.params.id, req.body?.displayName);
     if (!participant) {
       return sendError(res, Object.assign(new Error("participant_not_found"), { status: 404 }));
     }

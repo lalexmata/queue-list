@@ -118,6 +118,21 @@ async function setCouponCount(id, couponCount) {
   return rows[0] || null;
 }
 
+async function setDisplayName(id, displayName) {
+  const name = cleanDisplayName(displayName);
+  if (!name) {
+    throw Object.assign(new Error("invalid_display_name"), { status: 400 });
+  }
+  const { rows } = await pool.query(
+    `UPDATE giveaway_participants
+     SET display_name = $2, updated_at = NOW()
+     WHERE id = $1
+     RETURNING ${PARTICIPANT_COLUMNS}`,
+    [id, name]
+  );
+  return rows[0] || null;
+}
+
 async function removeParticipant(id) {
   const { rows } = await pool.query(
     `DELETE FROM giveaway_participants WHERE id = $1
@@ -133,4 +148,5 @@ module.exports = {
   listParticipants,
   removeParticipant,
   setCouponCount,
+  setDisplayName,
 };
