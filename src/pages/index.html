@@ -1,217 +1,393 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Lalexmata - Sistema Cola</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Centro de herramientas para la gestión del stream de Lalexmata">
+  <title>Lalexmata | Centro de herramientas</title>
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  <style>
+    :root {
+      --menu-card: rgba(14, 21, 36, .82);
+      --menu-line: rgba(255, 255, 255, .1);
+    }
 
-<style>
-  :root{
-    --bg0:#070A12;
-    --bg1:#0B1020;
-    --card:#121826cc;         /* semi-transparente */
-    --cardBorder:#1f2937;
-    --text:#ffffff;
-    --muted:rgba(255,255,255,.72);
+    html {
+      min-height: 100%;
+      height: auto;
+      background: var(--bg1);
+    }
 
-    /* Colores marca (ajústalos si quieres) */
-    --brandA:#2EE7D2;         /* turquesa */
-    --brandB:#4C7DFF;         /* azul */
-    --brandC:#7C3AED;         /* morado */
-  }
+    body.app-bg {
+      min-height: 100vh;
+      height: auto;
+      padding: 0;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      background-attachment: fixed;
+      overflow-x: clip;
+    }
 
-  *{ box-sizing:border-box; }
+    .menu-shell {
+      position: relative;
+      z-index: 1;
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 54px 0 64px;
+    }
 
-  body{
-    margin:0;
-    font-family: Arial, sans-serif;
-    color:var(--text);
-    min-height:100vh;
-    display:grid;
-    place-items:center;
-    padding:22px;
+    .hero {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      margin-bottom: 42px;
+    }
 
-    /* Fondo gamer suave */
-    background:
-      radial-gradient(1000px 700px at 15% 10%, rgba(46,231,210,.18), transparent 60%),
-      radial-gradient(900px 650px at 85% 15%, rgba(124,58,237,.14), transparent 62%),
-      radial-gradient(900px 650px at 40% 95%, rgba(76,125,255,.14), transparent 60%),
-      linear-gradient(180deg, var(--bg0), var(--bg1));
-    overflow:hidden;
-  }
+    .avatar-wrap {
+      width: 88px;
+      height: 88px;
+      flex: 0 0 auto;
+      padding: 3px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, var(--brandA), var(--brandB), var(--brandC));
+      box-shadow: 0 0 38px rgba(46, 231, 210, .2);
+      transform: rotate(-2deg);
+    }
 
-  /* grid "gamer" MUY suave */
-  body:before{
-    content:"";
-    position:fixed;
-    inset:-40%;
-    background:
-      linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
-    background-size: 70px 70px;
-    transform: rotate(12deg);
-    opacity:.06;
-    pointer-events:none;
-  }
+    .avatar {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border: 2px solid #0a0f1c;
+      border-radius: 21px;
+    }
 
-  /* brillo sutil */
-  body:after{
-    content:"";
-    position:fixed;
-    inset:0;
-    background:
-      radial-gradient(600px 280px at 50% 0%, rgba(46,231,210,.10), transparent 70%),
-      radial-gradient(520px 260px at 50% 100%, rgba(124,58,237,.10), transparent 70%);
-    pointer-events:none;
-  }
+    .eyebrow {
+      margin: 0 0 7px;
+      color: var(--brandA);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
 
-  .container{
-    width:100%;
-    max-width:420px;
-    position:relative;
-    z-index:1;
-  }
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 50px);
+      line-height: 1;
+      letter-spacing: -.035em;
+    }
 
-  .card{
-    background:var(--card);
-    border:1px solid rgba(31,41,55,.75);
-    border-radius:20px;
-    padding:26px 18px 18px;
-    box-shadow:
-      0 25px 60px rgba(0,0,0,.55),
-      0 0 0 1px rgba(255,255,255,.03) inset;
-    backdrop-filter: blur(10px);
-  }
+    .intro {
+      max-width: 650px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+    }
 
-  .top{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap:12px;
-    margin-bottom:16px;
-  }
+    .section + .section {
+      margin-top: 38px;
+    }
 
-  .avatarWrap{
-    position:relative;
-    width:132px;
-    height:132px;
-    border-radius:999px;
-    padding:4px;
-    background: linear-gradient(135deg, var(--brandA), var(--brandB), var(--brandC));
-    box-shadow: 0 0 26px rgba(46,231,210,.18);
-  }
+    .section-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 15px;
+    }
 
-  .avatar{
-    width:100%;
-    height:100%;
-    border-radius:999px;
-    object-fit:cover;
-    display:block;
-    border:2px solid rgba(0,0,0,.25);
-    background:#0b0b0b;
-  }
+    .section-heading h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: -.01em;
+    }
 
-  h1{
-    margin:0;
-    font-size:20px;
-    font-weight:900;
-    letter-spacing:.3px;
-  }
+    .section-heading p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
 
-  .subtitle{
-    margin:0;
-    font-size:13px;
-    color:var(--muted);
-  }
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
 
-  .btns{
-    display:grid;
-    gap:10px;
-    margin-top:14px;
-  }
+    .tool-card {
+      position: relative;
+      display: flex;
+      min-height: 188px;
+      flex-direction: column;
+      padding: 20px;
+      overflow: hidden;
+      color: var(--text);
+      text-decoration: none;
+      background: var(--menu-card);
+      border: 1px solid var(--menu-line);
+      border-radius: 20px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, .22);
+      backdrop-filter: blur(12px);
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    }
 
-  .btn{
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:8px;
-    text-decoration:none;
-    padding:12px 12px;
-    border-radius:14px;
-    font-weight:900;
-    font-size:14px;
-    transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
-    border:1px solid rgba(255,255,255,.08);
-  }
+    .tool-card::after {
+      content: "";
+      position: absolute;
+      right: -52px;
+      bottom: -62px;
+      width: 145px;
+      height: 145px;
+      border-radius: 50%;
+      background: var(--glow, var(--brandB));
+      filter: blur(52px);
+      opacity: .18;
+      pointer-events: none;
+    }
 
-  .btn:hover{
-    transform: translateY(-2px);
-    filter: brightness(1.05);
-  }
+    .tool-card:hover,
+    .tool-card:focus-visible {
+      transform: translateY(-5px);
+      border-color: rgba(46, 231, 210, .42);
+      box-shadow: 0 24px 52px rgba(0, 0, 0, .34);
+      outline: none;
+    }
 
-  .btnAdmin{
-    background: linear-gradient(135deg, rgba(124,58,237,.95), rgba(76,125,255,.95));
-    box-shadow: 0 10px 30px rgba(124,58,237,.18);
-  }
+    .tool-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
 
-  .btnMods{
-    background: linear-gradient(135deg, rgba(46,231,210,.95), rgba(76,125,255,.92));
-    box-shadow: 0 10px 30px rgba(46,231,210,.14);
-  }
+    .tool-icon {
+      display: grid;
+      width: 46px;
+      height: 46px;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, .1);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .065);
+      font-size: 23px;
+    }
 
-  .footer{
-    margin-top:14px;
-    text-align:center;
-    font-size:12px;
-    color:rgba(255,255,255,.55);
-  }
+    .tool-type {
+      padding: 6px 9px;
+      color: var(--muted);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .035);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
 
-  /* mini “chips” decorativos */
-  .chips{
-    display:flex;
-    gap:8px;
-    justify-content:center;
-    margin-top:10px;
-    flex-wrap:wrap;
-  }
-  .chip{
-    font-size:11px;
-    padding:6px 10px;
-    border-radius:999px;
-    background: rgba(255,255,255,.06);
-    border:1px solid rgba(255,255,255,.08);
-    color:rgba(255,255,255,.75);
-  }
-</style>
+    .tool-card h3 {
+      margin: auto 0 7px;
+      font-size: 17px;
+    }
+
+    .tool-card p {
+      min-height: 38px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .tool-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+      color: rgba(255, 255, 255, .88);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .tool-link span:last-child {
+      color: var(--brandA);
+      font-size: 18px;
+      transition: transform .2s ease;
+    }
+
+    .tool-card:hover .tool-link span:last-child {
+      transform: translateX(4px);
+    }
+
+    .overlay-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .overlay-grid .tool-card {
+      min-height: 160px;
+    }
+
+    .footer {
+      margin-top: 42px;
+      color: rgba(255, 255, 255, .4);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .tool-grid,
+      .overlay-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 700px) {
+      .menu-shell {
+        width: min(100% - 24px, 1180px);
+        padding: 30px 0 40px;
+      }
+
+      .hero {
+        align-items: flex-start;
+        gap: 15px;
+        margin-bottom: 32px;
+      }
+
+      .avatar-wrap {
+        width: 66px;
+        height: 66px;
+        border-radius: 19px;
+      }
+
+      .avatar {
+        border-radius: 16px;
+      }
+
+      .intro {
+        font-size: 13px;
+      }
+
+      .section-heading {
+        display: block;
+      }
+
+      .section-heading p {
+        margin-top: 5px;
+      }
+
+      .tool-grid,
+      .overlay-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .tool-card,
+      .overlay-grid .tool-card {
+        min-height: 172px;
+      }
+    }
+  </style>
 </head>
-
-<body>
-  <div class="container">
-    <div class="card">
-
-      <div class="top">
-        <div class="avatarWrap">
-          <!-- Pon tu imagen en /public/tu-imagen.png -->
-          <img class="avatar" src="/assets/img/lalex_front.png" alt="Lalexmata">
-        </div>
-
-        <h1>👑 Lalexmata</h1>
-        <p class="subtitle">Sistema de Gestión de stream</p>
-
-        <div class="chips">
-          <span class="chip">🎮 Cola</span>
-          <span class="chip">🛠️ Admin</span>
-          <span class="chip">🛡️ Mods</span>
-        </div>
+<body class="app-bg">
+  <main class="menu-shell">
+    <header class="hero">
+      <div class="avatar-wrap">
+        <img class="avatar" src="/assets/img/lalex_front.png" alt="Lalexmata">
       </div>
-
-      <div class="btns">
-        <a class="btn btnAdmin" href="/admin">🛠️ Panel Administrador</a>
-        <a class="btn btnMods" href="/comandos-mod">🎮 Comandos Moderadores</a>
+      <div>
+        <p class="eyebrow">Lalexmata Stream Hub</p>
+        <h1>Centro de herramientas</h1>
+        <p class="intro">Todas las pantallas del stream en un solo lugar. Elige una herramienta para comenzar.</p>
       </div>
+    </header>
 
-      <div class="footer">Powered by Lalexmata</div>
-    </div>
-  </div>
+    <section class="section" aria-labelledby="gestion-title">
+      <div class="section-heading">
+        <h2 id="gestion-title">Gestión y herramientas</h2>
+        <p>Paneles para administrar el directo</p>
+      </div>
+      <div class="tool-grid">
+        <!-- Para agregar una herramienta nueva, duplica uno de estos enlaces y cambia su href y contenido. -->
+        <a class="tool-card" href="/admin" style="--glow:#7c3aed">
+          <div class="tool-top"><span class="tool-icon">🎮</span><span class="tool-type">Administración</span></div>
+          <h3>Lista para jugar</h3>
+          <p>Administra, ordena y elimina jugadores de la cola del stream.</p>
+          <div class="tool-link"><span>Abrir herramienta</span><span>→</span></div>
+        </a>
+
+        <a class="tool-card" href="/admin/song-request" style="--glow:#ec4899">
+          <div class="tool-top"><span class="tool-icon">🎵</span><span class="tool-type">Música</span></div>
+          <h3>Solicitudes de canciones</h3>
+          <p>Reproduce y organiza las canciones solicitadas por la comunidad.</p>
+          <div class="tool-link"><span>Abrir herramienta</span><span>→</span></div>
+        </a>
+
+        <a class="tool-card" href="/comandos-mod" style="--glow:#2ee7d2">
+          <div class="tool-top"><span class="tool-icon">🛡️</span><span class="tool-type">Moderación</span></div>
+          <h3>Comandos de moderadores</h3>
+          <p>Consulta y gestiona los comandos disponibles para el equipo.</p>
+          <div class="tool-link"><span>Abrir herramienta</span><span>→</span></div>
+        </a>
+
+        <a class="tool-card" href="/admin-countdown" style="--glow:#f59e0b">
+          <div class="tool-top"><span class="tool-icon">⏱️</span><span class="tool-type">Configuración</span></div>
+          <h3>Temporizador</h3>
+          <p>Configura el contador que se muestra durante la transmisión.</p>
+          <div class="tool-link"><span>Abrir herramienta</span><span>→</span></div>
+        </a>
+
+        <a class="tool-card" href="/social/login" style="--glow:#4c7dff">
+          <div class="tool-top"><span class="tool-icon">📱</span><span class="tool-type">Contenido</span></div>
+          <h3>Social Manager</h3>
+          <p>Prepara y publica contenido para las distintas redes sociales.</p>
+          <div class="tool-link"><span>Ingresar</span><span>→</span></div>
+        </a>
+
+        <a class="tool-card" href="/cola" style="--glow:#22c55e">
+          <div class="tool-top"><span class="tool-icon">📋</span><span class="tool-type">Vista pública</span></div>
+          <h3>Vista de la cola</h3>
+          <p>Abre la lista de espera tal como se muestra a la audiencia.</p>
+          <div class="tool-link"><span>Ver pantalla</span><span>→</span></div>
+        </a>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="overlays-title">
+      <div class="section-heading">
+        <h2 id="overlays-title">Overlays y widgets</h2>
+        <p>Vistas listas para usar como fuente del navegador</p>
+      </div>
+      <div class="tool-grid overlay-grid">
+        <a class="tool-card" href="/widgets/song-request" style="--glow:#ec4899">
+          <div class="tool-top"><span class="tool-icon">♫</span><span class="tool-type">Widget</span></div>
+          <h3>Canción actual</h3>
+          <p>Overlay de solicitudes musicales.</p>
+          <div class="tool-link"><span>Ver widget</span><span>→</span></div>
+        </a>
+
+        <a class="tool-card" href="/overlays/countdown" style="--glow:#f59e0b">
+          <div class="tool-top"><span class="tool-icon">⌛</span><span class="tool-type">Overlay</span></div>
+          <h3>Cuenta regresiva</h3>
+          <p>Contador visual para el directo.</p>
+          <div class="tool-link"><span>Ver overlay</span><span>→</span></div>
+        </a>
+
+        <a class="tool-card" href="/widgets/social" style="--glow:#4c7dff">
+          <div class="tool-top"><span class="tool-icon">💬</span><span class="tool-type">Widget</span></div>
+          <h3>Redes sociales</h3>
+          <p>Rotador de perfiles sociales.</p>
+          <div class="tool-link"><span>Ver widget</span><span>→</span></div>
+        </a>
+
+        <a class="tool-card" href="/widgets/codigo" style="--glow:#2ee7d2">
+          <div class="tool-top"><span class="tool-icon">&lt;/&gt;</span><span class="tool-type">Widget</span></div>
+          <h3>Código</h3>
+          <p>Vista de código para la transmisión.</p>
+          <div class="tool-link"><span>Ver widget</span><span>→</span></div>
+        </a>
+      </div>
+    </section>
+
+    <footer class="footer">Powered by Lalexmata</footer>
+  </main>
 </body>
 </html>
