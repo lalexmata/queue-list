@@ -31,31 +31,57 @@ async function upsertByPriority(user) {
   const role = normalizeRole(user.role);
   const base = ROLE_BLOCK[role];
   const upper = base + 1000;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Serializa canjes simultáneos del mismo usuario, ignorando mayúsculas.
+    await client.query("SELECT pg_advisory_xact_lock(hashtext(lower($1)))", [user.uniqueId]);
+    const existing = await client.query(
+      `SELECT unique_id, position
+       FROM queue_items
+       WHERE lower(unique_id) = lower($1)
+       LIMIT 1
+       FOR UPDATE`,
+      [user.uniqueId]
+    );
 
-  console.log("upsertByPriority", { user, role, base, upper });
+    if (existing.rows[0]) {
+      await client.query(
+        `UPDATE queue_items
+         SET nickname = $2, role = $3, is_sub = $4, platform = $5
+         WHERE unique_id = $1`,
+        [
+          existing.rows[0].unique_id,
+          user.nickname,
+          role,
+          role === "subscriber",
+          user.platform || "unknown",
+        ]
+      );
+      await client.query("COMMIT");
+      return { added: false, position: Number(existing.rows[0].position) };
+    }
 
-  const { rows } = await pool.query(
-    `SELECT COALESCE(MAX(position), $1) AS maxpos
-     FROM queue_items
-     WHERE position >= $1 AND position < $2`,
-    [base, upper]
-  );
-
-  const nextPos = Number(rows[0].maxpos) + 1;
-
-  await pool.query(
-    `INSERT INTO queue_items (unique_id, nickname, role, is_sub, platform, ts, position)
-     VALUES ($1,$2,$3,$4,$5,NOW(),$6)
-     ON CONFLICT (unique_id) DO UPDATE SET
-       nickname = EXCLUDED.nickname,
-       role = EXCLUDED.role,
-       is_sub = EXCLUDED.is_sub,
-       platform = EXCLUDED.platform,
-       ts = NOW()`,
-    [user.uniqueId, user.nickname, role, role === "subscriber", user.platform || 'unknown', nextPos]
-  );
-
-  return nextPos;
+    const { rows } = await client.query(
+      `SELECT COALESCE(MAX(position), $1) AS maxpos
+       FROM queue_items
+       WHERE position >= $1 AND position < $2`,
+      [base, upper]
+    );
+    const nextPos = Number(rows[0].maxpos) + 1;
+    await client.query(
+      `INSERT INTO queue_items (unique_id, nickname, role, is_sub, platform, ts, position)
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+      [user.uniqueId, user.nickname, role, role === "subscriber", user.platform || "unknown", nextPos]
+    );
+    await client.query("COMMIT");
+    return { added: true, position: nextPos };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function getQueueWithPosition() {

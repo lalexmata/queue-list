@@ -70,7 +70,7 @@ router.all("/jugar", async (req, res) => {
     const role = resolveRole({ ...req.query, ...(req.body || {}) }, uniqueId);
     console.log("API /jugar data", { uniqueId, nickname, role, platform });
 
-    const pos = await upsertByPriority({
+    const result = await upsertByPriority({
       uniqueId: String(uniqueId),
       nickname: String(nickname || uniqueId),
       role,
@@ -78,7 +78,24 @@ router.all("/jugar", async (req, res) => {
     });
 
     const queue = await getQueue();
-    res.json({ ok: true, status: "ok", pos: queue.findIndex(u => u.uniqueId.toLowerCase() === String(uniqueId).toLowerCase()) + 1, size: queue.length });
+    const pos = queue.findIndex(
+      user => user.uniqueId.toLowerCase() === String(uniqueId).toLowerCase()
+    ) + 1;
+    const added = result.added;
+    const chatName = String(nickname || uniqueId).replace(/^@+/, "");
+    res.json({
+      ok: true,
+      status: added ? "added" : "already_in_queue",
+      added,
+      alreadyInQueue: !added,
+      shouldPlayVoice: added,
+      refund: !added,
+      pos,
+      size: queue.length,
+      message: added
+        ? `@${chatName} te agregué a la lista. Estás en la posición ${pos}.`
+        : `@${chatName} ya estás en la lista, espera tu turno. Estás en la posición ${pos}.`,
+    });
   } catch (e) {
     console.error("❌ Error en /api/jugar:", e);
     return res.status(500).json({ ok: false, error: "db_error", message: e.message, detail: e.detail || e.toString() });
