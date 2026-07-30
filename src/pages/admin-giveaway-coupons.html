@@ -40,7 +40,7 @@
     .bulk-card h2 { margin-bottom:5px; }
     .bulk-card > p { color:var(--muted); font-size:12px; margin-bottom:14px; }
     .bulk-source { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
-    .bulk-options { display:grid; grid-template-columns:1fr 1fr auto; align-items:end; gap:12px; }
+    .bulk-options { display:grid; grid-template-columns:1fr auto; align-items:end; gap:12px; }
     dialog {
       width:min(620px, calc(100% - 24px)); padding:0; color:#fff; background:#111827;
       border:1px solid rgba(255,255,255,.14); border-radius:18px; box-shadow:0 30px 80px rgba(0,0,0,.65);
@@ -50,6 +50,8 @@
     .dialog-header { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:14px; }
     .dialog-header p { margin-top:5px; color:var(--muted); font-size:12px; }
     .dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+    .source-editor { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .source-editor small { color:var(--muted); font-weight:500; text-transform:none; letter-spacing:0; }
     #wheelList { min-height:320px; font-family:ui-monospace, Consolas, monospace; font-size:13px; }
     .list-card { padding-bottom:6px; }
     .list-header { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; }
@@ -76,6 +78,10 @@
     }
     .coupon-control { display:flex; align-items:center; gap:7px; padding:5px; border-radius:12px; background:rgba(255,255,255,.045); }
     .coupon-value { min-width:38px; text-align:center; font-weight:900; color:var(--brandA); }
+    .source-breakdown { display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+    .source-chip { padding:4px 8px; border-radius:999px; background:rgba(46,231,210,.09); color:#c7fff8; font-size:11px; font-weight:800; }
+    .settings-row { display:flex; align-items:end; gap:12px; }
+    .settings-row label { max-width:280px; }
     .icon-btn { width:34px; height:34px; padding:0; }
     .delete-btn { color:#fca5a5; }
     .empty { padding:34px 10px; color:var(--muted); text-align:center; font-size:13px; }
@@ -93,6 +99,7 @@
       .actions { width:100%; justify-content:flex-end; }
       .list-header { align-items:stretch; flex-direction:column; }
       .list-tools, .search { width:100%; }
+      .source-editor { grid-template-columns:1fr; }
     }
     @media (max-width:390px) {
       .form-row { grid-template-columns:1fr; }
@@ -121,6 +128,19 @@
     </section>
 
     <section class="card form-card">
+      <h2>Configuración del sorteo</h2>
+      <p>Limita los cupones por canjes de puntos para cada usuario. Déjalo vacío para no limitar.</p>
+      <form id="settingsForm" class="settings-row">
+        <label>
+          Máximo por puntos de canal
+          <input id="channelPointsLimit" type="number" min="1" max="1000000" placeholder="Sin límite">
+        </label>
+        <button class="btn btn-primary" type="submit">Guardar configuración</button>
+        <span class="status" id="settingsStatus"></span>
+      </form>
+    </section>
+
+    <section class="card form-card">
       <h2>Agregar cupones</h2>
       <p>Si el usuario ya existe, la cantidad indicada se sumará a sus cupones actuales.</p>
       <form id="participantForm" class="form-row">
@@ -144,6 +164,15 @@
         <label class="coupon-field">
           Cantidad
           <input id="couponCount" name="couponCount" type="number" min="1" max="1000000" value="1" required>
+        </label>
+        <label>
+          Origen
+          <select id="couponSource" required>
+            <option value="channel_points">Puntos del canal</option>
+            <option value="subscriber">Suscriptor</option>
+            <option value="gifted_subs">Subs regaladas</option>
+            <option value="purchase">Compra con código</option>
+          </select>
         </label>
         <button class="btn btn-primary" id="submitButton" type="submit">Agregar</button>
       </form>
@@ -178,10 +207,6 @@
               <option value="other">Otra</option>
             </select>
           </label>
-          <label>
-            Cupones por persona
-            <input id="bulkCouponCount" type="number" min="1" max="1000000" value="1" required>
-          </label>
           <button class="btn btn-primary" id="bulkSubmitButton" type="submit">Importar participantes</button>
         </div>
       </form>
@@ -193,6 +218,8 @@
         <h2>Participantes</h2>
         <div class="list-tools">
           <input class="search" id="participantSearch" type="search" placeholder="Buscar participante…" aria-label="Buscar participante">
+          <button class="btn icon-btn" id="refreshRecords" type="button"
+            title="Actualizar registros" aria-label="Actualizar registros">↻</button>
           <span class="status" id="listStatus" role="status"></span>
         </div>
       </div>
@@ -200,6 +227,45 @@
       <div class="empty" id="empty">Todavía no hay participantes registrados.</div>
     </section>
   </main>
+
+  <dialog id="couponDialog">
+    <form id="couponEditorForm" class="dialog-body">
+      <div class="dialog-header">
+        <div>
+          <h2>Editar cupones</h2>
+          <p id="couponEditorParticipant"></p>
+        </div>
+        <button class="btn icon-btn" id="closeCouponDialog" type="button" aria-label="Cerrar">×</button>
+      </div>
+      <div class="source-editor">
+        <label>
+          Puntos del canal
+          <input id="editChannelPoints" type="number" min="0" max="1000000" required>
+          <small id="channelPointsHelp">Respeta el límite configurado.</small>
+        </label>
+        <label>
+          Suscripción
+          <input id="editSubscriber" type="number" min="0" max="3" required>
+          <small>Tier 1 = 1, Tier 2 = 2, Tier 3 = 3.</small>
+        </label>
+        <label>
+          Subs regaladas
+          <input id="editGiftedSubs" type="number" min="0" max="1000000" required>
+          <small>Acumulativo.</small>
+        </label>
+        <label>
+          Compras con código
+          <input id="editPurchases" type="number" min="0" max="1000000" required>
+          <small>Un cupón por compra, sin límite.</small>
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" id="cancelCouponDialog" type="button">Cancelar</button>
+        <button class="btn btn-primary" id="saveCouponsButton" type="submit">Guardar cupones</button>
+      </div>
+      <div class="status" id="couponEditorStatus" role="status"></div>
+    </form>
+  </dialog>
 
   <dialog id="wheelDialog">
     <div class="dialog-body">
@@ -235,6 +301,16 @@
     const wheelListEl = document.getElementById("wheelList");
     const wheelStatusEl = document.getElementById("wheelStatus");
     const participantSearchEl = document.getElementById("participantSearch");
+    const couponDialog = document.getElementById("couponDialog");
+    const couponEditorForm = document.getElementById("couponEditorForm");
+    const couponEditorStatus = document.getElementById("couponEditorStatus");
+    let editingParticipant = null;
+    const sourceInfo = {
+      channel_points: ["Puntos", "channelPointsCount"],
+      subscriber: ["Suscripción", "subscriberCount"],
+      gifted_subs: ["Subs regaladas", "giftedSubsCount"],
+      purchase: ["Compras", "purchaseCount"],
+    };
     let currentParticipants = [];
     let busy = false;
 
@@ -346,24 +422,23 @@
             <strong>${escapeHtml(participant.displayName)}</strong>
             <span>@${escapeHtml(participant.username)}</span>
             <small class="platform">${platform[0]} ${escapeHtml(platform[1])}</small>
+            <div class="source-breakdown">
+              ${Object.values(sourceInfo).map(([label, field]) =>
+                `<span class="source-chip">${label}: ${Number(participant[field] || 0)}</span>`
+              ).join("")}
+            </div>
           </div>
         </div>
         <div class="actions">
           <div class="coupon-control" aria-label="Cantidad de cupones">
-            <button class="btn icon-btn" data-change="-1" type="button" title="Restar un cupón">−</button>
             <span class="coupon-value">${Number(participant.couponCount)}</span>
-            <button class="btn icon-btn" data-change="1" type="button" title="Sumar un cupón">+</button>
+            <button class="btn" data-coupons type="button">Editar cupones</button>
           </div>
           <button class="btn icon-btn" data-edit type="button" title="Editar nombre visible">✏️</button>
           <button class="btn icon-btn delete-btn" data-delete type="button" title="Eliminar participante">🗑</button>
         </div>`;
 
-      item.querySelectorAll("[data-change]").forEach(button => {
-        button.addEventListener("click", () => changeCount(
-          participant,
-          Number(participant.couponCount) + Number(button.dataset.change)
-        ));
-      });
+      item.querySelector("[data-coupons]").addEventListener("click", () => openCouponEditor(participant));
       item.querySelector("[data-edit]").addEventListener("click", () => editDisplayName(participant));
       item.querySelector("[data-delete]").addEventListener("click", () => removeParticipant(participant));
       return item;
@@ -402,21 +477,52 @@
       }
     }
 
-    async function changeCount(participant, count) {
-      if (busy || count < 0) return;
+    function openCouponEditor(participant) {
+      editingParticipant = participant;
+      document.getElementById("couponEditorParticipant").textContent =
+        `${participant.displayName} · ${participant.couponCount} cupón(es) en total`;
+      document.getElementById("editChannelPoints").value = Number(participant.channelPointsCount || 0);
+      document.getElementById("editSubscriber").value = Number(participant.subscriberCount || 0);
+      document.getElementById("editGiftedSubs").value = Number(participant.giftedSubsCount || 0);
+      document.getElementById("editPurchases").value = Number(participant.purchaseCount || 0);
+      couponEditorStatus.textContent = "";
+      couponEditorStatus.classList.remove("error");
+      couponDialog.showModal();
+    }
+
+    couponEditorForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (busy || !editingParticipant) return;
       busy = true;
+      document.getElementById("saveCouponsButton").disabled = true;
+      couponEditorStatus.textContent = "Guardando…";
+      couponEditorStatus.classList.remove("error");
       try {
-        await request(`/api/giveaway-coupons/${participant.id}`, {
+        await request(`/api/giveaway-coupons/${editingParticipant.id}/sources`, {
           method: "PUT",
-          body: JSON.stringify({ couponCount: count }),
+          body: JSON.stringify({
+            channel_points: Number(document.getElementById("editChannelPoints").value),
+            subscriber: Number(document.getElementById("editSubscriber").value),
+            gifted_subs: Number(document.getElementById("editGiftedSubs").value),
+            purchase: Number(document.getElementById("editPurchases").value),
+          }),
         });
+        couponDialog.close();
         await loadParticipants();
       } catch (error) {
-        alert(error.message);
+        couponEditorStatus.textContent = error.message;
+        couponEditorStatus.classList.add("error");
       } finally {
         busy = false;
+        document.getElementById("saveCouponsButton").disabled = false;
       }
-    }
+    });
+
+    document.getElementById("closeCouponDialog").addEventListener("click", () => couponDialog.close());
+    document.getElementById("cancelCouponDialog").addEventListener("click", () => couponDialog.close());
+    couponDialog.addEventListener("click", event => {
+      if (event.target === couponDialog) couponDialog.close();
+    });
 
     async function editDisplayName(participant) {
       if (busy) return;
@@ -460,9 +566,10 @@
         const username = document.getElementById("username").value.trim();
         const platform = document.getElementById("platform").value;
         const couponCount = Number(document.getElementById("couponCount").value);
+        const couponSource = document.getElementById("couponSource").value;
         const data = await request("/api/giveaway-coupons/redeem", {
           method: "POST",
-          body: JSON.stringify({ username, displayName: username.replace(/^@/, ""), platform, couponCount }),
+          body: JSON.stringify({ username, displayName: username.replace(/^@/, ""), platform, couponCount, couponSource }),
         });
         formStatusEl.textContent = data.message;
         formEl.reset();
@@ -497,13 +604,13 @@
           ? participantsFromCsv(await file.text())
           : participantsFromLines(bulkTextEl.value);
         const platform = document.getElementById("bulkPlatform").value;
-        const couponCount = Number(document.getElementById("bulkCouponCount").value);
+        const couponCount = 1;
 
         // Evita sumar dos veces al mismo usuario si está repetido dentro del archivo.
         const uniqueParticipants = Array.from(new Map(
           sourceParticipants.map(item => [
             item.username.replace(/^@/, "").toLowerCase(),
-            { ...item, platform, couponCount },
+            { ...item, platform, couponCount, source: "subscriber" },
           ])
         ).values());
 
@@ -515,7 +622,6 @@
         });
         bulkStatusEl.textContent = data.message;
         bulkFormEl.reset();
-        document.getElementById("bulkCouponCount").value = 1;
         await loadParticipants();
       } catch (error) {
         bulkStatusEl.classList.add("error");
@@ -526,7 +632,22 @@
       }
     });
 
-    document.getElementById("refresh").addEventListener("click", loadParticipants);
+    async function refreshData() {
+      const buttons = [
+        document.getElementById("refresh"),
+        document.getElementById("refreshRecords"),
+      ];
+      buttons.forEach(button => { button.disabled = true; });
+      listStatusEl.textContent = "Actualizando…";
+      try {
+        await Promise.all([loadSettings(), loadParticipants()]);
+      } finally {
+        buttons.forEach(button => { button.disabled = false; });
+      }
+    }
+
+    document.getElementById("refresh").addEventListener("click", refreshData);
+    document.getElementById("refreshRecords").addEventListener("click", refreshData);
     participantSearchEl.addEventListener("input", renderParticipantList);
 
     function buildWheelList() {
@@ -574,6 +695,37 @@
       if (event.target === wheelDialog) wheelDialog.close();
     });
 
+    async function loadSettings() {
+      try {
+        const data = await request("/api/giveaway-coupons/settings");
+        const limit = data.settings.channelPointsLimit;
+        document.getElementById("channelPointsLimit").value = limit ?? "";
+        document.getElementById("editChannelPoints").max = limit ?? 1000000;
+        document.getElementById("channelPointsHelp").textContent =
+          limit === null ? "Sin límite configurado." : `Máximo configurado: ${limit}.`;
+      } catch (error) {
+        document.getElementById("settingsStatus").textContent = error.message;
+      }
+    }
+
+    document.getElementById("settingsForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const status = document.getElementById("settingsStatus");
+      try {
+        const value = document.getElementById("channelPointsLimit").value;
+        await request("/api/giveaway-coupons/settings", {
+          method: "PUT",
+          body: JSON.stringify({ channelPointsLimit: value === "" ? null : Number(value) }),
+        });
+        status.textContent = "Configuración guardada.";
+        await loadSettings();
+        await loadParticipants();
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    });
+
+    loadSettings();
     loadParticipants();
   </script>
 </body>

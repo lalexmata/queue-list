@@ -2,6 +2,28 @@
 
 Un servidor API para gestionar colas de usuarios en tiempo real, ideal para streamers y bots de redes sociales como TikTok.
 
+## Consulta de cupones desde el chat
+
+El comando del bot puede consultar:
+
+```text
+GET /api/giveaway-coupons/user/USUARIO?platform=twitch
+```
+
+La respuesta incluye `couponCount`, el desglose en `sources` y un campo `message`
+listo para publicar en el chat:
+
+```json
+{
+  "couponCount": 5,
+  "message": "@usuario tienes 5 cupones para el sorteo"
+}
+```
+
+Si el usuario todavía no está registrado o tiene cero cupones, el mensaje será
+`@usuario no tienes cupones para el sorteo 😢`. En Streamer.bot se debe reemplazar `USUARIO` por el argumento del comando
+y enviar al chat el valor JSON `message`.
+
 ## 📋 Descripción
 
 Este proyecto proporciona una API REST para gestionar una cola de usuarios. Los usuarios pueden unirse, ver su posición, salir de la cola, y los administradores pueden gestionar el flujo sacando al siguiente usuario.
