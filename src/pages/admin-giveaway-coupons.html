@@ -34,13 +34,15 @@
     }
     textarea { min-height:130px; resize:vertical; line-height:1.45; }
     input[type="file"] { padding:9px; color:var(--muted); }
-    select { color-scheme:dark; }
+    select { color-scheme:dark; background-color:#172033; color:#fff; }
+    select option { background:#172033; color:#fff; }
+    select option:checked { background:#263653; color:#fff; }
     input:focus, select:focus, textarea:focus { border-color:var(--brandA); box-shadow:0 0 0 3px rgba(46,231,210,.1); }
     .bulk-card { margin-bottom:16px; }
     .bulk-card h2 { margin-bottom:5px; }
     .bulk-card > p { color:var(--muted); font-size:12px; margin-bottom:14px; }
     .bulk-source { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
-    .bulk-options { display:grid; grid-template-columns:1fr auto; align-items:end; gap:12px; }
+    .bulk-options { display:grid; grid-template-columns:1fr 1fr 150px auto; align-items:end; gap:12px; }
     dialog {
       width:min(620px, calc(100% - 24px)); padding:0; color:#fff; background:#111827;
       border:1px solid rgba(255,255,255,.14); border-radius:18px; box-shadow:0 30px 80px rgba(0,0,0,.65);
@@ -181,7 +183,7 @@
 
     <section class="card bulk-card">
       <h2>Importación masiva</h2>
-      <p>Sube el CSV de suscriptores exportado desde Twitch o pega usuarios separados por líneas. Cada persona recibirá la cantidad seleccionada.</p>
+      <p>Sube un CSV o pega usuarios separados por líneas. Selecciona el origen y cuántos cupones recibirá cada persona.</p>
       <form id="bulkForm">
         <div class="bulk-source">
           <label>
@@ -206,6 +208,19 @@
               <option value="discord">Discord</option>
               <option value="other">Otra</option>
             </select>
+          </label>
+          <label>
+            Origen
+            <select id="bulkCouponSource" required>
+              <option value="subscriber">Suscripción</option>
+              <option value="channel_points">Puntos del canal</option>
+              <option value="gifted_subs">Subs regaladas</option>
+              <option value="purchase">Compra con código</option>
+            </select>
+          </label>
+          <label>
+            Cupones por persona
+            <input id="bulkCouponCount" type="number" min="1" max="3" value="1" required>
           </label>
           <button class="btn btn-primary" id="bulkSubmitButton" type="submit">Importar participantes</button>
         </div>
@@ -313,6 +328,20 @@
     };
     let currentParticipants = [];
     let busy = false;
+
+    function updateCouponCountLimit(sourceId, countId) {
+      const source = document.getElementById(sourceId).value;
+      const input = document.getElementById(countId);
+      input.max = source === "subscriber" ? 3 : 1000000;
+      if (Number(input.value) > Number(input.max)) input.value = input.max;
+    }
+
+    document.getElementById("couponSource").addEventListener("change", () => {
+      updateCouponCountLimit("couponSource", "couponCount");
+    });
+    document.getElementById("bulkCouponSource").addEventListener("change", () => {
+      updateCouponCountLimit("bulkCouponSource", "bulkCouponCount");
+    });
 
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, character => ({
@@ -574,6 +603,7 @@
         formStatusEl.textContent = data.message;
         formEl.reset();
         document.getElementById("couponCount").value = 1;
+        updateCouponCountLimit("couponSource", "couponCount");
         document.getElementById("username").focus();
         await loadParticipants();
       } catch (error) {
@@ -604,15 +634,24 @@
           ? participantsFromCsv(await file.text())
           : participantsFromLines(bulkTextEl.value);
         const platform = document.getElementById("bulkPlatform").value;
-        const couponCount = 1;
+        const couponCount = Number(document.getElementById("bulkCouponCount").value);
+        const source = document.getElementById("bulkCouponSource").value;
 
-        // Evita sumar dos veces al mismo usuario si está repetido dentro del archivo.
-        const uniqueParticipants = Array.from(new Map(
-          sourceParticipants.map(item => [
-            item.username.replace(/^@/, "").toLowerCase(),
-            { ...item, platform, couponCount, source: "subscriber" },
-          ])
-        ).values());
+        // Las filas repetidas representan canjes distintos en los orígenes
+        // acumulativos. En suscripciones solo se conserva el tier indicado.
+        const participantMap = new Map();
+        sourceParticipants.forEach(item => {
+          const key = item.username.replace(/^@/, "").toLowerCase();
+          const existing = participantMap.get(key);
+          if (!existing) {
+            participantMap.set(key, { ...item, platform, couponCount, source });
+          } else if (source !== "subscriber") {
+            existing.couponCount += couponCount;
+          } else {
+            existing.couponCount = Math.max(existing.couponCount, couponCount);
+          }
+        });
+        const uniqueParticipants = Array.from(participantMap.values());
 
         if (!uniqueParticipants.length) throw new Error("No se encontraron participantes en la lista.");
         bulkStatusEl.textContent = `Importando ${uniqueParticipants.length} participante(s)…`;
@@ -622,6 +661,8 @@
         });
         bulkStatusEl.textContent = data.message;
         bulkFormEl.reset();
+        document.getElementById("bulkCouponCount").value = 1;
+        updateCouponCountLimit("bulkCouponSource", "bulkCouponCount");
         await loadParticipants();
       } catch (error) {
         bulkStatusEl.classList.add("error");
