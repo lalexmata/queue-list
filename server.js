@@ -14,6 +14,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 const { createApp } = require("./src/app");
+const { startPixelBot } = require("./src/discord/pixelbot");
 
 console.log('🔧 Starting application...');
 console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -58,4 +59,8 @@ process.on('SIGINT', () => {
     console.log('👋 Server closed');
     process.exit(0);
   });
+});
+
+startPixelBot().catch((error) => {
+  console.error('PixelBot failed to start:', error);
 });

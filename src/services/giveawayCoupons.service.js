@@ -2,7 +2,7 @@ const { pool } = require("../database/db");
 
 const SOURCES = ["channel_points", "subscriber", "gifted_subs", "purchase"];
 const PARTICIPANT_COLUMNS = `
-  p.id, p.username, p.display_name AS "displayName", p.platform,
+  p.id, p.giveaway_id AS "giveawayId", p.username, p.display_name AS "displayName", p.platform,
   COALESCE(SUM(s.coupon_count), 0)::int AS "couponCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'channel_points'), 0)::int AS "channelPointsCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'subscriber'), 0)::int AS "subscriberCount",
@@ -60,12 +60,21 @@ async function getParticipant(db, id) {
   return rows[0] || null;
 }
 
-async function listParticipants() {
+async function getActiveGiveawayId(db = pool) {
+  const { rows } = await db.query(`SELECT id FROM giveaways WHERE status = 'active' ORDER BY id DESC LIMIT 1`);
+  if (!rows[0]) throw fail("no_active_giveaway", 409);
+  return rows[0].id;
+}
+
+async function listParticipants(giveawayId = null) {
+  const selectedGiveawayId = giveawayId || await getActiveGiveawayId();
   const { rows } = await pool.query(
     `SELECT ${PARTICIPANT_COLUMNS}
      FROM giveaway_participants p LEFT JOIN giveaway_coupon_sources s ON s.participant_id = p.id
+     WHERE p.giveaway_id = $1
      GROUP BY p.id
-     ORDER BY COALESCE(SUM(s.coupon_count), 0) DESC, LOWER(p.platform), LOWER(p.display_name), p.id`
+     ORDER BY COALESCE(SUM(s.coupon_count), 0) DESC, LOWER(p.platform), LOWER(p.display_name), p.id`,
+    [selectedGiveawayId]
   );
   return rows;
 }
@@ -77,32 +86,45 @@ async function findParticipantByUsername(rawUsername, rawPlatform = "twitch") {
   if (!["twitch", "tiktok", "youtube", "kick", "facebook", "instagram", "discord", "other"].includes(platform)) {
     throw fail("invalid_platform");
   }
+  const giveawayId = await getActiveGiveawayId();
   const { rows } = await pool.query(
     `SELECT ${PARTICIPANT_COLUMNS}
      FROM giveaway_participants p LEFT JOIN giveaway_coupon_sources s ON s.participant_id = p.id
-     WHERE LOWER(p.username) = $1 AND LOWER(p.platform) = $2
+     WHERE LOWER(p.username) = $1 AND LOWER(p.platform) = $2 AND p.giveaway_id = $3
      GROUP BY p.id`,
-    [username, platform]
+    [username, platform, giveawayId]
   );
   return rows[0] || null;
 }
 
 async function getSettings(db = pool) {
   const { rows } = await db.query(
-    `SELECT channel_points_limit AS "channelPointsLimit" FROM giveaway_settings WHERE id = 1`
+    `SELECT channel_points_limit AS "channelPointsLimit", is_active AS "isActive"
+     FROM giveaway_settings WHERE id = 1`
   );
-  return rows[0] || { channelPointsLimit: null };
+  return rows[0] || { channelPointsLimit: null, isActive: false };
+}
+
+async function setGiveawayActive(isActive) {
+  const { rows } = await pool.query(
+    `INSERT INTO giveaway_settings (id, is_active) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE SET is_active = EXCLUDED.is_active, updated_at = NOW()
+     RETURNING channel_points_limit AS "channelPointsLimit", is_active AS "isActive"`,
+    [Boolean(isActive)]
+  );
+  return rows[0];
 }
 
 async function upsertCoupons(db, rawParticipant) {
   const item = normalizeParticipant(rawParticipant);
+  const giveawayId = await getActiveGiveawayId(db);
   const { rows } = await db.query(
-    `INSERT INTO giveaway_participants (username, display_name, platform, coupon_count)
-     VALUES ($1, $2, $3, 0)
-     ON CONFLICT (LOWER(platform), LOWER(username)) DO UPDATE SET
+    `INSERT INTO giveaway_participants (giveaway_id, username, display_name, platform, coupon_count)
+     VALUES ($1, $2, $3, $4, 0)
+     ON CONFLICT (giveaway_id, LOWER(platform), LOWER(username)) DO UPDATE SET
        display_name = EXCLUDED.display_name, updated_at = NOW()
      RETURNING id`,
-    [item.username, item.displayName, item.platform]
+    [giveawayId, item.username, item.displayName, item.platform]
   );
   const participantId = rows[0].id;
   if (item.source === "subscriber") {
@@ -272,5 +294,5 @@ async function updateSettings(value) {
 
 module.exports = {
   addCoupons, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, removeParticipant,
-  setDisplayName, setSourceCount, setSourceCounts, updateSettings,
+  setDisplayName, setSourceCount, setSourceCounts, updateSettings, setGiveawayActive, getActiveGiveawayId,
 };

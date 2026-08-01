@@ -210,6 +210,14 @@ Este servidor está diseñado para integrarse fácilmente con bots de:
 - Discord
 - Y cualquier plataforma que soporte webhooks HTTP
 
+La configuración de Discord, Fortnite y cumpleaños está documentada en
+[`PIXELBOT.md`](PIXELBOT.md).
+
+Los sorteos se administran desde `/admin/sorteos/configuracion`. Cada ronda tiene
+nombre, fecha, cantidad de ganadores, estado e historial independiente. La página
+`/admin/sorteos` muestra únicamente los participantes del sorteo activo y pagina
+el listado de veinte en veinte.
+
 ## 🐛 Solución de problemas
 
 ### Error: "Object.hasOwn is not a function"

@@ -60,6 +60,7 @@
     .list-tools { display:flex; align-items:center; gap:10px; }
     .search { width:min(280px, 100%); }
     .status { min-height:18px; color:var(--muted); font-size:12px; }
+    .pagination { display:flex; justify-content:center; align-items:center; gap:10px; padding:14px 0 8px; }
     .status.error { color:#fca5a5; }
     .participants { list-style:none; padding:0; margin:0; }
     .participant { justify-content:space-between; padding:14px 0; border-bottom:1px solid rgba(255,255,255,.08); }
@@ -119,6 +120,7 @@
         <p class="subtitle">Registro acumulativo de canjes provenientes de cualquier plataforma.</p>
       </div>
       <div class="actions">
+        <a class="btn" href="/admin/sorteos/configuracion">⚙️ Configurar sorteos</a>
         <button class="btn btn-primary" id="getWheelList" type="button">🎡 Obtener lista para ruleta</button>
         <button class="btn" id="refresh" type="button">Actualizar</button>
       </div>
@@ -139,6 +141,26 @@
         </label>
         <button class="btn btn-primary" type="submit">Guardar configuración</button>
         <span class="status" id="settingsStatus"></span>
+      </form>
+    </section>
+
+    <section class="card form-card">
+      <h2>Estado del sorteo en Discord</h2>
+      <p>PixelBot solo permite consultar cupones cuando el sorteo está activo en el servidor seleccionado.</p>
+      <form id="discordGiveawayForm" class="settings-row">
+        <label>
+          Servidor de Discord
+          <select id="discordGuild" required></select>
+        </label>
+        <label>
+          Estado
+          <select id="discordGiveawayActive" required>
+            <option value="false">Inactivo</option>
+            <option value="true">Activo</option>
+          </select>
+        </label>
+        <button class="btn btn-primary" type="submit">Guardar estado</button>
+        <span class="status" id="discordGiveawayStatus"></span>
       </form>
     </section>
 
@@ -240,6 +262,11 @@
       </div>
       <ul class="participants" id="participants"></ul>
       <div class="empty" id="empty">Todavía no hay participantes registrados.</div>
+      <div class="pagination" id="pagination" hidden>
+        <button class="btn" id="previousPage" type="button">← Anterior</button>
+        <span class="status" id="pageStatus"></span>
+        <button class="btn" id="nextPage" type="button">Siguiente →</button>
+      </div>
     </section>
   </main>
 
@@ -327,6 +354,8 @@
       purchase: ["Compras", "purchaseCount"],
     };
     let currentParticipants = [];
+    let currentPage = 1;
+    const pageSize = 20;
     let busy = false;
 
     function updateCouponCountLimit(sourceId, countId) {
@@ -480,8 +509,11 @@
         return [participant.displayName, participant.username, platform]
           .some(value => String(value || "").toLocaleLowerCase("es").includes(query));
       });
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      currentPage = Math.min(currentPage, totalPages);
+      const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
       listEl.innerHTML = "";
-      filtered.forEach(participant => listEl.appendChild(renderParticipant(participant)));
+      pageItems.forEach(participant => listEl.appendChild(renderParticipant(participant)));
       emptyEl.style.display = filtered.length ? "none" : "block";
       emptyEl.textContent = currentParticipants.length
         ? "No se encontraron participantes con ese filtro."
@@ -489,6 +521,11 @@
       listStatusEl.textContent = query
         ? `${filtered.length} resultado(s)`
         : `${currentParticipants.reduce((total, item) => total + Number(item.couponCount), 0)} cupón(es)`;
+      const pagination = document.getElementById("pagination");
+      pagination.hidden = filtered.length <= pageSize;
+      document.getElementById("pageStatus").textContent = `Página ${currentPage} de ${totalPages} · ${filtered.length} participante(s)`;
+      document.getElementById("previousPage").disabled = currentPage <= 1;
+      document.getElementById("nextPage").disabled = currentPage >= totalPages;
     }
 
     async function loadParticipants() {
@@ -689,7 +726,14 @@
 
     document.getElementById("refresh").addEventListener("click", refreshData);
     document.getElementById("refreshRecords").addEventListener("click", refreshData);
-    participantSearchEl.addEventListener("input", renderParticipantList);
+    participantSearchEl.addEventListener("input", () => { currentPage = 1; renderParticipantList(); });
+    document.getElementById("previousPage").addEventListener("click", () => {
+      if (currentPage > 1) { currentPage -= 1; renderParticipantList(); }
+    });
+    document.getElementById("nextPage").addEventListener("click", () => {
+      currentPage += 1;
+      renderParticipantList();
+    });
 
     function buildWheelList() {
       const names = [];
@@ -766,7 +810,57 @@
       }
     });
 
+    let discordGuilds = [];
+
+    function showSelectedGuildState() {
+      const guildId = document.getElementById("discordGuild").value;
+      const guild = discordGuilds.find(item => item.guildId === guildId);
+      document.getElementById("discordGiveawayActive").value = String(Boolean(guild?.giveawayActive));
+    }
+
+    async function loadDiscordGiveawaySettings() {
+      const status = document.getElementById("discordGiveawayStatus");
+      try {
+        const data = await request("/api/giveaway-coupons/discord-guilds");
+        discordGuilds = data.guilds || [];
+        const select = document.getElementById("discordGuild");
+        select.innerHTML = discordGuilds.length
+          ? discordGuilds.map(guild => `<option value="${guild.guildId}">${escapeHtml(guild.guildName)}</option>`).join("")
+          : '<option value="">PixelBot todavía no está vinculado a un servidor</option>';
+        select.disabled = !discordGuilds.length;
+        document.getElementById("discordGiveawayActive").disabled = !discordGuilds.length;
+        document.querySelector("#discordGiveawayForm button").disabled = !discordGuilds.length;
+        showSelectedGuildState();
+        status.textContent = discordGuilds.length ? "" : "Ejecuta un comando de PixelBot en Discord para registrar el servidor.";
+      } catch (error) {
+        status.textContent = error.message;
+        status.classList.add("error");
+      }
+    }
+
+    document.getElementById("discordGuild").addEventListener("change", showSelectedGuildState);
+    document.getElementById("discordGiveawayForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const status = document.getElementById("discordGiveawayStatus");
+      const guildId = document.getElementById("discordGuild").value;
+      if (!guildId) return;
+      try {
+        const active = document.getElementById("discordGiveawayActive").value === "true";
+        await request(`/api/giveaway-coupons/discord-guilds/${encodeURIComponent(guildId)}/active`, {
+          method: "PUT",
+          body: JSON.stringify({ active }),
+        });
+        status.classList.remove("error");
+        status.textContent = active ? "Sorteo activo en Discord." : "Sorteo desactivado en Discord.";
+        await loadDiscordGiveawaySettings();
+      } catch (error) {
+        status.classList.add("error");
+        status.textContent = error.message;
+      }
+    });
+
     loadSettings();
+    loadDiscordGiveawaySettings();
     loadParticipants();
   </script>
 </body>

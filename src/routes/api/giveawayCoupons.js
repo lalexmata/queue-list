@@ -3,6 +3,7 @@ const {
   addCoupons, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, removeParticipant,
   setDisplayName, setSourceCount, setSourceCounts, updateSettings,
 } = require("../../services/giveawayCoupons.service");
+const { listGuildSettings, updateGuildSettings } = require("../../services/pixelbot.service");
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ function sendError(res, error) {
     participant_not_found: "No se encontró al participante.",
     subscriber_coupon_limit: "Los cupones de suscripción deben estar entre 0 y 3, según el tier.",
     channel_points_limit_reached: "La cantidad supera el límite de canjes con puntos configurado.",
+    no_active_giveaway: "No hay un sorteo activo. Crea o activa uno desde la configuración.",
     db_error: "No se pudo procesar la solicitud en la base de datos.",
   };
   return res.status(status).json({
@@ -34,9 +36,9 @@ function sendError(res, error) {
   });
 }
 
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const participants = await listParticipants();
+    const participants = await listParticipants(req.query.giveawayId || null);
     const totalCoupons = participants.reduce((total, item) => total + Number(item.couponCount), 0);
     res.json({ ok: true, participants, totalParticipants: participants.length, totalCoupons });
   } catch (error) {
@@ -55,6 +57,26 @@ router.get("/settings", async (_req, res) => {
 router.put("/settings", async (req, res) => {
   try {
     res.json({ ok: true, settings: await updateSettings(req.body?.channelPointsLimit) });
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+router.get("/discord-guilds", async (_req, res) => {
+  try {
+    res.json({ ok: true, guilds: await listGuildSettings() });
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+router.put("/discord-guilds/:guildId/active", async (req, res) => {
+  try {
+    if (typeof req.body?.active !== "boolean") {
+      return res.status(400).json({ ok: false, error: "invalid_active_status", message: "El estado del sorteo no es válido." });
+    }
+    const settings = await updateGuildSettings(req.params.guildId, { giveawayActive: req.body.active });
+    res.json({ ok: true, settings, message: req.body.active ? "Sorteo activado." : "Sorteo desactivado." });
   } catch (error) {
     sendError(res, error);
   }

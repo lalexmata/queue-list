@@ -7,6 +7,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "start:dev": "nodemon --watch . --ext js,html,css --exec node server.js",
+    "migrate:pixelbot": "node scripts/run-migration.js add_pixelbot.sql",
+    "migrate:pixelbot-giveaway": "node scripts/run-migration.js add_pixelbot_giveaway.sql",
+    "migrate:giveaway-rounds": "node scripts/run-migration.js add_giveaway_rounds.sql",
+    "discord:register": "node scripts/register-discord-commands.js",
     "healthcheck": "curl -f http://localhost:${PORT:-8080}/health || exit 1"
   },
   "keywords": [],
@@ -14,6 +18,7 @@
   "license": "ISC",
   "dependencies": {
     "axios": "^1.18.1",
+    "discord.js": "^14.22.1",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "express-session": "^1.19.0",

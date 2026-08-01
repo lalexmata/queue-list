@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuración de sorteos</title>
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  <style>
+    body.app-bg { min-height:100vh; height:auto; }
+    .wrap { width:100%; max-width:980px; position:relative; z-index:1; }
+    .header, .form-grid, .actions, .giveaway-head, .meta { display:flex; gap:12px; align-items:center; }
+    .header { justify-content:space-between; flex-wrap:wrap; margin-bottom:16px; }
+    h1, h2, h3, p { margin:0; }
+    h1 { font-size:24px; } h2 { font-size:18px; }
+    .subtitle, .muted { color:var(--muted); font-size:12px; }
+    .back { color:var(--muted); text-decoration:none; font-weight:800; font-size:13px; }
+    .form-grid { align-items:flex-end; margin-top:14px; }
+    label { display:grid; gap:6px; flex:1; color:var(--muted); font-size:11px; font-weight:800; text-transform:uppercase; }
+    input, select, textarea { width:100%; padding:11px 12px; color:#fff; background:#172033; border:1px solid rgba(255,255,255,.12); border-radius:11px; font:inherit; color-scheme:dark; }
+    select option { color:#fff; background:#172033; }
+    select option:checked { color:#fff; background:#263653; }
+    .giveaways { display:grid; gap:12px; margin-top:16px; }
+    .giveaway { padding:17px; border-radius:15px; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.09); }
+    .giveaway-head { justify-content:space-between; align-items:flex-start; }
+    .meta { flex-wrap:wrap; margin-top:9px; color:var(--muted); font-size:12px; }
+    .badge { display:inline-flex; padding:4px 9px; border-radius:999px; font-size:10px; font-weight:900; text-transform:uppercase; }
+    .badge.active { color:#b8fff1; background:rgba(16,185,129,.16); }
+    .badge.draft { color:#fde68a; background:rgba(245,158,11,.15); }
+    .badge.finished { color:#cbd5e1; background:rgba(148,163,184,.14); }
+    .winners { margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,.08); font-size:13px; }
+    .winners div { margin-top:5px; }
+    .status { min-height:18px; margin-top:10px; color:var(--muted); font-size:12px; }
+    dialog { width:min(620px, calc(100% - 24px)); padding:20px; color:#fff; background:#111827; border:1px solid rgba(255,255,255,.14); border-radius:18px; }
+    dialog::backdrop { background:rgba(2,6,15,.8); }
+    .winner-row { display:grid; grid-template-columns:70px 1fr; gap:10px; align-items:center; margin-top:10px; }
+    .modal-form { display:grid; gap:14px; margin-top:15px; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:4px; }
+    @media (max-width:700px) { body.app-bg{padding:12px}.form-grid{display:grid}.giveaway-head{display:grid}.actions{flex-wrap:wrap}.winner-row{grid-template-columns:1fr} }
+  </style>
+</head>
+<body class="app-bg">
+  <main class="wrap">
+    <header class="header">
+      <div>
+        <a class="back" href="/admin/sorteos">← Participantes y cupones</a>
+        <h1>🎉 Configuración de sorteos</h1>
+        <p class="subtitle">Crea rondas independientes, conserva el historial y registra varios ganadores.</p>
+      </div>
+      <button class="btn" id="refresh" type="button">Actualizar</button>
+    </header>
+
+    <section class="card">
+      <h2>Crear nuevo sorteo</h2>
+      <p class="muted">Se crea como borrador. Actívalo cuando hayas finalizado el sorteo anterior.</p>
+      <form id="createForm" class="form-grid">
+        <label>Nombre<input id="name" maxlength="120" placeholder="Sorteo de agosto" required></label>
+        <label>Fecha y hora<input id="drawAt" type="datetime-local"></label>
+        <label>Ganadores<input id="winnerCount" type="number" min="1" max="100" value="1" required></label>
+        <button class="btn btn-primary" type="submit">Crear sorteo</button>
+      </form>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <h2>Sorteos e historial</h2>
+      <div class="giveaways" id="giveaways"><p class="muted">Cargando…</p></div>
+    </section>
+  </main>
+
+  <dialog id="winnerDialog">
+    <h2 id="winnerTitle">Configurar ganadores</h2>
+    <p class="muted">Cada posición puede tener un participante diferente.</p>
+    <div id="winnerRows"></div>
+    <div class="actions" style="justify-content:flex-end;margin-top:16px">
+      <button class="btn" id="closeWinners" type="button">Cerrar</button>
+    </div>
+  </dialog>
+
+  <dialog id="editDialog">
+    <form id="editForm">
+      <h2>Editar sorteo</h2>
+      <p class="muted">Actualiza la información general y guarda todos los cambios a la vez.</p>
+      <div class="modal-form">
+        <label>
+          Nombre del sorteo
+          <input id="editName" maxlength="120" required>
+        </label>
+        <label>
+          Fecha y hora
+          <input id="editDrawAt" type="datetime-local">
+        </label>
+        <label>
+          Cantidad de ganadores
+          <input id="editWinnerCount" type="number" min="1" max="100" required>
+        </label>
+        <div class="status" id="editStatus"></div>
+        <div class="modal-actions">
+          <button class="btn" id="cancelEdit" type="button">Cancelar</button>
+          <button class="btn btn-primary" id="saveEdit" type="submit">Guardar cambios</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    let giveaways = [];
+    let editingGiveawayId = null;
+    const statusEl = document.getElementById("status");
+
+    function esc(value) { const div=document.createElement("div"); div.textContent=String(value??""); return div.innerHTML; }
+    async function request(url, options={}) {
+      const response = await fetch(url, { headers:{"Content-Type":"application/json",...(options.headers||{})}, ...options });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) throw new Error(data.message || data.error || "Error inesperado");
+      return data;
+    }
+    function dateText(value) { return value ? new Intl.DateTimeFormat("es-CL", {dateStyle:"medium",timeStyle:"short"}).format(new Date(value)) : "Sin fecha"; }
+    function statusText(value) { return ({active:"Activo",draft:"Borrador",finished:"Finalizado"})[value] || value; }
+
+    function render() {
+      const root = document.getElementById("giveaways");
+      if (!giveaways.length) { root.innerHTML='<p class="muted">Todavía no hay sorteos.</p>'; return; }
+      root.innerHTML = giveaways.map(item => `
+        <article class="giveaway">
+          <div class="giveaway-head">
+            <div><h3>${esc(item.name)}</h3><div class="meta"><span class="badge ${item.status}">${statusText(item.status)}</span><span>📅 ${dateText(item.drawAt)}</span><span>👥 ${item.participantCount}</span><span>🎟️ ${item.couponCount}</span><span>🏆 ${item.winnerCount}</span></div></div>
+            <div class="actions">
+              ${item.status !== "finished" ? `<button class="btn" onclick="editGiveaway('${item.id}')">Editar</button>` : ""}
+              ${item.status === "draft" ? `<button class="btn btn-primary" onclick="activateGiveaway('${item.id}')">Activar</button>` : ""}
+              ${item.status === "active" ? `<button class="btn" onclick="finishGiveaway('${item.id}')">Finalizar</button>` : ""}
+              <button class="btn" onclick="openWinners('${item.id}')">Ganadores</button>
+            </div>
+          </div>
+          <div class="winners"><strong>Ganadores:</strong>${item.winners.length ? item.winners.map(w=>`<div>🏆 ${w.position}. ${esc(w.displayName)} <span class="muted">@${esc(w.username)} · ${esc(w.platform)}</span></div>`).join("") : '<div class="muted">Sin ganadores registrados.</div>'}</div>
+        </article>`).join("");
+    }
+
+    async function load() { const data=await request("/api/giveaways"); giveaways=data.giveaways; render(); }
+    document.getElementById("createForm").addEventListener("submit", async event => {
+      event.preventDefault(); statusEl.textContent="";
+      try {
+        const localDrawAt = document.getElementById("drawAt").value;
+        await request("/api/giveaways", {method:"POST",body:JSON.stringify({name:document.getElementById("name").value,drawAt:localDrawAt?new Date(localDrawAt).toISOString():null,winnerCount:Number(document.getElementById("winnerCount").value)})});
+        event.target.reset(); document.getElementById("winnerCount").value=1; statusEl.textContent="Sorteo creado como borrador."; await load();
+      } catch(error) { statusEl.textContent=error.message; }
+    });
+    function toLocalInputValue(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      const offset = date.getTimezoneOffset() * 60000;
+      return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    }
+
+    function editGiveaway(id) {
+      const item = giveaways.find(g => String(g.id) === String(id));
+      if (!item) return;
+      editingGiveawayId = id;
+      document.getElementById("editName").value = item.name;
+      document.getElementById("editDrawAt").value = toLocalInputValue(item.drawAt);
+      document.getElementById("editWinnerCount").value = item.winnerCount;
+      document.getElementById("editStatus").textContent = "";
+      document.getElementById("editDialog").showModal();
+    }
+
+    document.getElementById("editForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!editingGiveawayId) return;
+      const status = document.getElementById("editStatus");
+      const saveButton = document.getElementById("saveEdit");
+      const localDrawAt = document.getElementById("editDrawAt").value;
+      status.textContent = "Guardando…";
+      saveButton.disabled = true;
+      try {
+        await request(`/api/giveaways/${editingGiveawayId}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            name: document.getElementById("editName").value,
+            drawAt: localDrawAt ? new Date(localDrawAt).toISOString() : null,
+            winnerCount: Number(document.getElementById("editWinnerCount").value),
+          }),
+        });
+        document.getElementById("editDialog").close();
+        editingGiveawayId = null;
+        await load();
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+    document.getElementById("cancelEdit").addEventListener("click", () => {
+      document.getElementById("editDialog").close();
+      editingGiveawayId = null;
+    });
+    document.getElementById("editDialog").addEventListener("close", () => { editingGiveawayId = null; });
+    async function activateGiveaway(id) { if(!confirm("¿Activar este sorteo?"))return; try{await request(`/api/giveaways/${id}/activate`,{method:"POST"});await load();}catch(e){alert(e.message);} }
+    async function finishGiveaway(id) { if(!confirm("¿Finalizar el sorteo? Los cupones quedarán archivados."))return; try{await request(`/api/giveaways/${id}/finish`,{method:"POST"});await load();}catch(e){alert(e.message);} }
+
+    async function openWinners(id) {
+      const item=giveaways.find(g=>String(g.id)===String(id));
+      const data=await request(`/api/giveaway-coupons?giveawayId=${encodeURIComponent(id)}`);
+      const participants=data.participants;
+      document.getElementById("winnerTitle").textContent=`Ganadores · ${item.name}`;
+      document.getElementById("winnerRows").innerHTML=Array.from({length:item.winnerCount},(_,index)=>{
+        const position=index+1, current=item.winners.find(w=>w.position===position);
+        const options=participants.map(p=>`<option value="${p.id}" ${current&&String(current.participantId)===String(p.id)?"selected":""}>${esc(p.displayName)} (@${esc(p.username)}) · ${p.couponCount} cupón(es)</option>`).join("");
+        return `<div class="winner-row"><strong>#${position}</strong><select onchange="changeWinner('${id}',${position},'${current?.id||""}',this.value)"><option value="">Sin asignar</option>${options}</select></div>`;
+      }).join("");
+      document.getElementById("winnerDialog").showModal();
+    }
+    async function changeWinner(giveawayId,position,winnerId,participantId) {
+      try {
+        if (participantId) await request(`/api/giveaways/${giveawayId}/winners/${position}`,{method:"PUT",body:JSON.stringify({participantId})});
+        else if (winnerId) await request(`/api/giveaways/${giveawayId}/winners/${winnerId}`,{method:"DELETE"});
+        await load();
+      }
+      catch(error){alert(error.message);}
+    }
+    document.getElementById("closeWinners").addEventListener("click",()=>document.getElementById("winnerDialog").close());
+    document.getElementById("refresh").addEventListener("click",load);
+    load().catch(error=>{statusEl.textContent=error.message;});
+  </script>
+</body>
+</html>

@@ -34,6 +34,14 @@ FROM information_schema.columns
 WHERE table_name = 'queue_items' AND column_name = 'platform';
 ```
 
+## PixelBot
+
+Aplica `add_pixelbot.sql` para crear la configuración por servidor de Discord,
+los vínculos con Epic y los cumpleaños.
+
+Aplica `add_giveaway_rounds.sql` para separar los cupones por sorteo, conservar
+el historial y registrar múltiples ganadores.
+
 Deberías ver:
 ```
  column_name | data_type | column_default 
