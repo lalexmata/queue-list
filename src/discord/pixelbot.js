@@ -1,5 +1,6 @@
 const { Client, Events, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const { getPlayerStats } = require("../services/fortnite.service");
+const { renderFortniteStatsCard } = require("../services/fortnite-card.service");
 const { findParticipantByUsername, getActiveGiveawayId } = require("../services/giveawayCoupons.service");
 const { getLatestGiveawayWithWinners } = require("../services/giveawayRounds.service");
 const {
@@ -42,14 +43,26 @@ async function handleFortnite(interaction) {
   const linked = suppliedName ? null : await getFortniteAccount(interaction.guildId, interaction.user.id);
   if (!suppliedName && !linked) throw Object.assign(new Error("account_not_linked"), { status: 404 });
   const stats = await getPlayerStats(suppliedName || linked.epicName, interaction.options.getString("periodo"));
-  const embed = new EmbedBuilder().setColor(0x7c3aed).setTitle(`📊 Estadísticas de ${stats.name}`)
-    .addFields(
-      { name: "Victorias", value: String(stats.wins), inline: true }, { name: "Eliminaciones", value: String(stats.kills), inline: true },
-      { name: "K/D", value: stats.kd.toFixed(2), inline: true }, { name: "Partidas", value: String(stats.matches), inline: true },
-      { name: "Win rate", value: `${stats.winRate.toFixed(2)}%`, inline: true }, { name: "Kills/partida", value: stats.killsPerMatch.toFixed(2), inline: true },
-      { name: "El juicio de PixelBot", value: `*${stats.verdict}*` }
-    ).setFooter({ text: stats.timeWindow === "season" ? "Temporada actual" : "Histórico" });
-  return interaction.editReply({ embeds: [embed] });
+  try {
+    const card = await renderFortniteStatsCard(stats);
+    const safeName = String(stats.name).replace(/[^a-z0-9_-]+/gi, "-").slice(0, 50) || "stats";
+    return interaction.editReply({
+      content: `**El juicio de PixelBot:** *${stats.verdict}*`,
+      files: [{ attachment: card, name: `fortnite-${safeName}.png` }],
+    });
+  } catch (error) {
+    console.error("PixelBot Fortnite card render error:", error);
+    const embed = new EmbedBuilder().setColor(0x7c3aed).setTitle(`📊 Estadísticas de ${stats.name}`)
+      .addFields(
+        { name: "Victorias", value: String(stats.wins), inline: true },
+        { name: "Eliminaciones", value: String(stats.kills), inline: true },
+        { name: "K/D", value: stats.kd.toFixed(2), inline: true },
+        { name: "Partidas", value: String(stats.matches), inline: true },
+        { name: "Win rate", value: `${stats.winRate.toFixed(2)}%`, inline: true },
+        { name: "El juicio de PixelBot", value: `*${stats.verdict}*` }
+      ).setFooter({ text: stats.timeWindow === "season" ? "Temporada actual" : "Histórico" });
+    return interaction.editReply({ embeds: [embed] });
+  }
 }
 
 async function handleBirthday(interaction) {
@@ -205,6 +218,7 @@ async function handleMention(message) {
 }
 
 async function startPixelBot() {
+  if (client) return client;
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) { console.log("ℹ️ PixelBot disabled: DISCORD_BOT_TOKEN is not configured"); return null; }
   client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
@@ -228,9 +242,17 @@ async function startPixelBot() {
       if (interaction.commandName === "sorteo") await handleGiveaway(interaction);
       if (interaction.commandName === "pixelbot") await handleConfig(interaction);
     } catch (error) {
+      if (error.code === 40060) {
+        console.warn(`PixelBot ignored duplicate acknowledgement for interaction ${interaction.id}. Check for another bot instance using the same token.`);
+        return;
+      }
       console.error("PixelBot command error:", error);
       const payload = { content: errorMessage(error), ephemeral: true };
-      if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.reply(payload);
+      try {
+        if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.reply(payload);
+      } catch (replyError) {
+        if (replyError.code !== 40060) console.error("PixelBot error response failed:", replyError);
+      }
     }
   });
   await client.login(token);

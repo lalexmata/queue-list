@@ -1,7 +1,7 @@
 const express = require("express");
 const {
   addCoupons, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, removeParticipant,
-  setDisplayName, setSourceCount, setSourceCounts, updateSettings,
+  setDisplayName, setSourceCount, setSourceCounts, updateSettings, getActiveGiveawayId,
 } = require("../../services/giveawayCoupons.service");
 const { listGuildSettings, updateGuildSettings } = require("../../services/pixelbot.service");
 
@@ -85,12 +85,28 @@ router.put("/discord-guilds/:guildId/active", async (req, res) => {
 // Endpoint simple para que el bot consulte y publique directamente el campo "message".
 router.get("/user/:username", async (req, res) => {
   try {
+    try {
+      await getActiveGiveawayId();
+    } catch (error) {
+      if (error.message !== "no_active_giveaway") throw error;
+      const username = String(req.params.username || "").replace(/^@+/, "").toLowerCase();
+      return res.json({
+        ok: true,
+        active: false,
+        username,
+        platform: req.query.platform || "twitch",
+        couponCount: 0,
+        message: "En este momento no hay un sorteo activo.",
+        sources: { channelPoints: 0, subscriber: 0, giftedSubs: 0, purchases: 0 },
+      });
+    }
     const username = String(req.params.username || "").replace(/^@+/, "").toLowerCase();
     const platform = req.query.platform || "twitch";
     const participant = await findParticipantByUsername(username, platform);
     const couponCount = Number(participant?.couponCount || 0);
     res.json({
       ok: true,
+      active: true,
       username,
       platform,
       couponCount,
@@ -129,6 +145,10 @@ router.all("/redeem", async (req, res) => {
     });
   } catch (error) {
     // Streamer.bot debe poder leer el JSON y decidir si cancela/reembolsa el canje.
+    if (error?.message === "no_active_giveaway") {
+      error.refund = true;
+      error.chatMessage = "No hay un sorteo activo. Puntos devueltos.";
+    }
     if (error.refund) error.status = 200;
     sendError(res, error);
   }

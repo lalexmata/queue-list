@@ -21,6 +21,41 @@ function getSkillVerdict(stats) {
   return "Todavía está calentando motores. Cada partida suma experiencia.";
 }
 
+function number(value) {
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function normalizeModeStats(rawStats) {
+  if (!rawStats) return null;
+  return {
+    wins: number(rawStats.wins), kills: number(rawStats.kills), deaths: number(rawStats.deaths),
+    kd: number(rawStats.kd), matches: number(rawStats.matches), winRate: number(rawStats.winRate),
+    killsPerMatch: number(rawStats.killsPerMatch), minutesPlayed: number(rawStats.minutesPlayed),
+    top3: number(rawStats.top3), top5: number(rawStats.top5), top6: number(rawStats.top6),
+    top10: number(rawStats.top10), top12: number(rawStats.top12), top25: number(rawStats.top25),
+  };
+}
+
+function normalizeStatsPayload(data, fallbackName, timeWindow) {
+  const allStats = data?.stats?.all || {};
+  const overall = normalizeModeStats(allStats.overall);
+  if (!overall) throw fail("player_stats_unavailable", 404);
+  const stats = {
+    accountId: data?.account?.id || null,
+    name: data?.account?.name || fallbackName,
+    battlePassLevel: number(data?.battlePass?.level),
+    ...overall,
+    timeWindow,
+    modes: {
+      solo: normalizeModeStats(allStats.solo),
+      duo: normalizeModeStats(allStats.duo),
+      squad: normalizeModeStats(allStats.squad),
+      ltm: normalizeModeStats(allStats.ltm),
+    },
+  };
+  return { ...stats, verdict: getSkillVerdict(stats) };
+}
+
 async function getPlayerStats(rawName, rawTimeWindow = "lifetime") {
   const apiKey = process.env.FORTNITE_API_KEY;
   if (!apiKey) throw fail("fortnite_not_configured", 503);
@@ -44,19 +79,7 @@ async function getPlayerStats(rawName, rawTimeWindow = "lifetime") {
         : response.status === 429 ? "fortnite_rate_limited" : "fortnite_api_error";
     throw fail(code, status, { apiStatus: response.status, detail: body.error });
   }
-  const overall = body.data?.stats?.all?.overall;
-  if (!overall) throw fail("player_stats_unavailable", 404);
-  const stats = {
-    accountId: body.data?.account?.id || null,
-    name: body.data?.account?.name || name,
-    battlePassLevel: Number(body.data?.battlePass?.level || 0),
-    wins: Number(overall.wins || 0), kills: Number(overall.kills || 0),
-    deaths: Number(overall.deaths || 0), kd: Number(overall.kd || 0),
-    matches: Number(overall.matches || 0), winRate: Number(overall.winRate || 0),
-    killsPerMatch: Number(overall.killsPerMatch || 0),
-    minutesPlayed: Number(overall.minutesPlayed || 0), timeWindow,
-  };
-  return { ...stats, verdict: getSkillVerdict(stats) };
+  return normalizeStatsPayload(body.data, name, timeWindow);
 }
 
-module.exports = { getPlayerStats, getSkillVerdict };
+module.exports = { getPlayerStats, getSkillVerdict, normalizeStatsPayload };
