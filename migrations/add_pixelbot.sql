@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS discord_guild_settings (
   guild_name TEXT,
   allowed_channel_id TEXT,
   birthday_channel_id TEXT,
+  welcome_channel_id TEXT,
   admin_role_id TEXT,
   timezone TEXT NOT NULL DEFAULT 'America/Santiago',
   fortnite_enabled BOOLEAN NOT NULL DEFAULT TRUE,

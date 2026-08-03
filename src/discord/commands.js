@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
 
 const commands = [
   new SlashCommandBuilder().setName("fortnite").setDescription("Consulta o vincula estadísticas de Fortnite")
@@ -32,6 +32,9 @@ const commands = [
       .addChannelOption(opt => opt.setName("canal").setDescription("Canal para comandos").setRequired(true)))
     .addSubcommand(sub => sub.setName("canal-cumpleanos").setDescription("Establece el canal de felicitaciones")
       .addChannelOption(opt => opt.setName("canal").setDescription("Canal para felicitar cumpleaños").setRequired(true)))
+    .addSubcommand(sub => sub.setName("canal-bienvenida").setDescription("Establece el canal de entradas y salidas")
+      .addChannelOption(opt => opt.setName("canal").setDescription("Canal para mensajes de bienvenida y despedida")
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true)))
     .addSubcommand(sub => sub.setName("estado").setDescription("Muestra la configuración del servidor")),
 ].map(command => command.toJSON());
 

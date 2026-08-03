@@ -13,7 +13,8 @@ async function ensureGuild({ guildId, guildName = null }) {
 async function getGuildSettings(guildId) {
   const { rows } = await pool.query(
     `SELECT guild_id AS "guildId", guild_name AS "guildName", allowed_channel_id AS "allowedChannelId",
-            birthday_channel_id AS "birthdayChannelId", admin_role_id AS "adminRoleId", timezone,
+            birthday_channel_id AS "birthdayChannelId", welcome_channel_id AS "welcomeChannelId",
+            admin_role_id AS "adminRoleId", timezone,
             fortnite_enabled AS "fortniteEnabled", birthdays_enabled AS "birthdaysEnabled",
             giveaway_active AS "giveawayActive"
      FROM discord_guild_settings WHERE guild_id = $1`, [String(guildId)]
@@ -33,8 +34,8 @@ async function listGuildSettings() {
 
 async function updateGuildSettings(guildId, changes) {
   await ensureGuild({ guildId });
-  const allowed = ["allowedChannelId", "birthdayChannelId", "adminRoleId", "timezone", "giveawayActive"];
-  const columns = { allowedChannelId: "allowed_channel_id", birthdayChannelId: "birthday_channel_id", adminRoleId: "admin_role_id", timezone: "timezone", giveawayActive: "giveaway_active" };
+  const allowed = ["allowedChannelId", "birthdayChannelId", "welcomeChannelId", "adminRoleId", "timezone", "giveawayActive"];
+  const columns = { allowedChannelId: "allowed_channel_id", birthdayChannelId: "birthday_channel_id", welcomeChannelId: "welcome_channel_id", adminRoleId: "admin_role_id", timezone: "timezone", giveawayActive: "giveaway_active" };
   const entries = allowed.filter(key => changes[key] !== undefined);
   if (!entries.length) return getGuildSettings(guildId);
   const values = entries.map(key => changes[key] ?? null);

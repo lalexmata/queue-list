@@ -49,6 +49,7 @@ function normalizeStatsPayload(data, fallbackName, timeWindow) {
     modes: {
       solo: normalizeModeStats(allStats.solo),
       duo: normalizeModeStats(allStats.duo),
+      trio: normalizeModeStats(allStats.trio),
       squad: normalizeModeStats(allStats.squad),
       ltm: normalizeModeStats(allStats.ltm),
     },

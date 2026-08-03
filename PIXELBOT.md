@@ -9,8 +9,9 @@ PixelBot comparte los servicios y la base de datos de esta aplicación. Si
 2. Crea la aplicación PixelBot en Discord Developer Portal.
 3. En OAuth2 URL Generator selecciona `bot` y `applications.commands`.
 4. Concede `View Channels`, `Send Messages` y `Embed Links`.
-5. Crea una API key en https://dash.fortnite-api.com/.
-6. Configura en Railway:
+5. En **Bot > Privileged Gateway Intents**, activa **Server Members Intent**.
+6. Crea una API key en https://dash.fortnite-api.com/.
+7. Configura en Railway:
 
 ```env
 DISCORD_BOT_TOKEN=
@@ -33,11 +34,17 @@ No publiques estas claves ni las agregues al repositorio.
 - `/sorteo estado`, `/sorteo activar` y `/sorteo desactivar` controlan el sorteo.
 - `/pixelbot canal canal:` (requiere Gestionar servidor)
 - `/pixelbot canal-cumpleanos canal:` configura dónde se publican las felicitaciones.
+- `/pixelbot canal-bienvenida canal:` configura las entradas y salidas del servidor.
 - `/pixelbot estado`
 
 PixelBot revisa los cumpleaños cada 15 minutos según la zona horaria configurada
 y felicita una sola vez por usuario y fecha. Si no se define un canal de cumpleaños,
 utiliza el canal general de PixelBot.
+
+PixelBot publica una bienvenida cuando entra una persona y una despedida cuando
+abandona el servidor. Ignora cuentas bot. Para habilitarlo, aplica la migración
+`npm run migrate:pixelbot-welcome`, vuelve a registrar los comandos con
+`npm run discord:register` y configura el canal con `/pixelbot canal-bienvenida`.
 
 PixelBot también responde cuando un usuario lo menciona en un mensaje. Esta función
 solo escucha eventos de mensajes y no requiere activar intents privilegiados.

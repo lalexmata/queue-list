@@ -8,6 +8,7 @@
     "start": "node server.js",
     "start:dev": "nodemon --watch . --ext js,html,css --exec node server.js",
     "migrate:pixelbot": "node scripts/run-migration.js add_pixelbot.sql",
+    "migrate:pixelbot-welcome": "node scripts/run-migration.js add_pixelbot_welcome.sql",
     "migrate:pixelbot-giveaway": "node scripts/run-migration.js add_pixelbot_giveaway.sql",
     "migrate:giveaway-rounds": "node scripts/run-migration.js add_giveaway_rounds.sql",
     "discord:register": "node scripts/register-discord-commands.js",

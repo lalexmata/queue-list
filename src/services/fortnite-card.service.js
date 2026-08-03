@@ -3,17 +3,18 @@ const fs = require("fs");
 const opentype = require("opentype.js");
 const sharp = require("sharp");
 
-const BACKGROUND_PATH = path.join(__dirname, "..", "assets", "img", "fortnite-stats-background.png");
+const BACKGROUND_PATH = path.join(__dirname, "..", "assets", "img", "fortnite-stats-background-v2.png");
 const FONT_PATH = path.join(__dirname, "..", "assets", "fonts", "RobotoCondensed.ttf");
 const fontBuffer = fs.readFileSync(FONT_PATH);
 const font = opentype.parse(fontBuffer.buffer.slice(fontBuffer.byteOffset, fontBuffer.byteOffset + fontBuffer.byteLength));
 const WIDTH = 1536;
 const HEIGHT = 1024;
 const PANELS = [
-  { key: "solo", label: "SOLO", x: 146, y: 334, accent: "#28d7ff", tops: [["TOP 10", "top10"], ["TOP 25", "top25"]] },
-  { key: "duo", label: "DUOS", x: 802, y: 334, accent: "#b74cff", tops: [["TOP 5", "top5"], ["TOP 12", "top12"]] },
-  { key: "squad", label: "SQUADS", x: 146, y: 634, accent: "#28d7ff", tops: [["TOP 3", "top3"], ["TOP 6", "top6"]] },
-  { key: "ltm", label: "LTM", x: 802, y: 634, accent: "#b74cff", tops: [["TOP 10", "top10"], ["TOP 25", "top25"]] },
+  { key: "solo", label: "SOLO", y: 195, accent: "#28d7ff", tops: [["TOP 10", "top10"], ["TOP 25", "top25"]] },
+  { key: "duo", label: "DUOS", y: 350, accent: "#5cff84", tops: [["TOP 5", "top5"], ["TOP 12", "top12"]] },
+  { key: "trio", label: "TRIOS", y: 507, accent: "#ffb11b", tops: [["TOP 3", "top3"], ["TOP 6", "top6"]] },
+  { key: "squad", label: "SQUADS", y: 663, accent: "#b74cff", tops: [["TOP 3", "top3"], ["TOP 6", "top6"]] },
+  { key: "ltm", label: "LTM", y: 819, accent: "#f4ed58", tops: [["TOP 10", "top10"], ["TOP 25", "top25"]] },
 ];
 
 function shortText(value, maxLength) {
@@ -45,29 +46,31 @@ function vectorText(value, x, y, size, fill, options = {}) {
   return `<path d="${pathData}" fill="${fill}"${stroke}/>`;
 }
 
-function metric(label, value, x, y, color = "#ffffff") {
-  return `${vectorText(label, x, y, 14, "#9298b3", { bold: true })}
-    ${vectorText(value, x, y + 35, 27, color, { bold: true })}`;
+function metric(label, value, x, y, accent) {
+  return `${vectorText(label, x, y + 42, 15, "#9298b3", { bold: true })}
+    ${vectorText(value, x, y + 79, 29, "#ffffff", { bold: true })}
+    <rect x="${x}" y="${y + 91}" width="145" height="4" rx="2" fill="#202638"/>
+    <rect x="${x}" y="${y + 91}" width="112" height="4" rx="2" fill="${accent}"/>`;
 }
 
 function renderPanel(panel, stats) {
-  const { x, y, label, accent, tops } = panel;
+  const { y, label, accent, tops } = panel;
+  const leftX = 70;
+  const metricsX = [354, 548, 742, 936, 1130, 1324];
   if (!stats) {
-    return `${vectorText(label, x, y + 30, 31, accent, { bold: true })}
-      ${vectorText("Sin datos disponibles", x, y + 112, 23, "#9298b3", { bold: true })}`;
+    return `${vectorText(label, leftX, y + 49, 31, accent, { bold: true })}
+      ${vectorText("SIN DATOS DE LA API ACTUAL", 354, y + 81, 25, "#9298b3", { bold: true })}
+      ${vectorText("Fortnite-API devuelve este modo vacío", 354, y + 111, 15, "#6f7690")}`;
   }
-  const columns = [x, x + 150, x + 300, x + 450];
-  return `${vectorText(label, x, y + 30, 31, accent, { bold: true })}
-    ${vectorText(`${integer(stats.matches)} PARTIDAS`, x + 560, y + 28, 16, "#b9bdd3", { anchor: "end", bold: true })}
-    <line x1="${x}" y1="${y + 48}" x2="${x + 560}" y2="${y + 48}" stroke="${accent}" stroke-width="3" opacity=".8"/>
-    ${metric("VICTORIAS", integer(stats.wins), columns[0], y + 82, accent)}
-    ${metric("WIN RATE", `${decimal(stats.winRate)}%`, columns[1], y + 82)}
-    ${metric("ELIMINACIONES", integer(stats.kills), columns[2], y + 82)}
-    ${metric("K/D", decimal(stats.kd), columns[3], y + 82, accent)}
-    ${metric(tops[0][0], integer(stats[tops[0][1]]), columns[0], y + 166)}
-    ${metric(tops[1][0], integer(stats[tops[1][1]]), columns[1], y + 166)}
-    ${metric("KILLS/PARTIDA", decimal(stats.killsPerMatch), columns[2], y + 166)}
-    ${metric("TIEMPO", `${integer(Math.round(stats.minutesPlayed / 60))} h`, columns[3], y + 166)}`;
+  return `${vectorText(label, leftX, y + 49, 31, accent, { bold: true })}
+    ${vectorText(`${integer(stats.matches)} PARTIDAS`, 286, y + 48, 15, "#d7d9ef", { anchor: "end", bold: true })}
+    ${vectorText(`${integer(Math.round(stats.minutesPlayed / 60))} HORAS`, leftX, y + 100, 17, "#ffffff", { bold: true })}
+    ${metric("VICTORIAS", integer(stats.wins), metricsX[0], y, accent)}
+    ${metric("WIN RATE", `${decimal(stats.winRate)}%`, metricsX[1], y, accent)}
+    ${metric("ELIMINACIONES", integer(stats.kills), metricsX[2], y, accent)}
+    ${metric("K/D", decimal(stats.kd), metricsX[3], y, accent)}
+    ${metric(tops[0][0], integer(stats[tops[0][1]]), metricsX[4], y, accent)}
+    ${metric(tops[1][0], integer(stats[tops[1][1]]), metricsX[5], y, accent)}`;
 }
 
 function buildOverlay(stats) {
@@ -75,10 +78,10 @@ function buildOverlay(stats) {
   const level = stats.battlePassLevel > 0 ? `NIVEL ${integer(stats.battlePassLevel)}` : "";
   const panels = PANELS.map(panel => renderPanel(panel, stats.modes?.[panel.key])).join("\n");
   return Buffer.from(`<svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-    ${vectorText(`PIXELBOT · ${period}`, 154, 112, 22, "#6fe8ff", { bold: true })}
-    ${vectorText(shortText(stats.name, 28), 154, 174, 54, "#ffffff", { bold: true })}
-    ${vectorText(level, 1375, 111, 22, "#6fe8ff", { anchor: "end", bold: true })}
-    ${vectorText(`${integer(stats.wins)} VICTORIAS · ${integer(stats.kills)} ELIMINACIONES · ${decimal(stats.kd)} K/D`, 1375, 168, 20, "#d7d9ef", { anchor: "end", bold: true })}
+    ${vectorText(`PIXELBOT · ${period}`, 75, 91, 20, "#6fe8ff", { bold: true })}
+    ${vectorText(shortText(stats.name, 28), 75, 146, 47, "#ffffff", { bold: true })}
+    ${vectorText(level, 1455, 89, 20, "#d66bff", { anchor: "end", bold: true })}
+    ${vectorText(`${integer(stats.wins)} VICTORIAS · ${integer(stats.kills)} ELIMINACIONES · ${decimal(stats.kd)} K/D`, 1455, 143, 19, "#d7d9ef", { anchor: "end", bold: true })}
     ${panels}
   </svg>`);
 }

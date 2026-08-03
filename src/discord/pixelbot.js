@@ -161,8 +161,44 @@ async function handleConfig(interaction) {
     await updateGuildSettings(interaction.guildId, { birthdayChannelId: channel.id });
     return interaction.reply({ content: `Las felicitaciones se publicarán en ${channel}.`, ephemeral: true });
   }
+  if (interaction.options.getSubcommand() === "canal-bienvenida") {
+    const channel = interaction.options.getChannel("canal", true);
+    await updateGuildSettings(interaction.guildId, { welcomeChannelId: channel.id });
+    return interaction.reply({ content: `Las bienvenidas y despedidas se publicarán en ${channel}.`, ephemeral: true });
+  }
   const settings = await getGuildSettings(interaction.guildId);
-  return interaction.reply({ content: `Canal: ${settings?.allowedChannelId ? `<#${settings.allowedChannelId}>` : "todos"}\nCanal de cumpleaños: ${settings?.birthdayChannelId ? `<#${settings.birthdayChannelId}>` : "usa el canal general"}\nZona horaria: ${settings?.timezone || "America/Santiago"}`, ephemeral: true });
+  return interaction.reply({ content: `Canal: ${settings?.allowedChannelId ? `<#${settings.allowedChannelId}>` : "todos"}\nCanal de cumpleaños: ${settings?.birthdayChannelId ? `<#${settings.birthdayChannelId}>` : "usa el canal general"}\nCanal de bienvenida: ${settings?.welcomeChannelId ? `<#${settings.welcomeChannelId}>` : "sin configurar"}\nZona horaria: ${settings?.timezone || "America/Santiago"}`, ephemeral: true });
+}
+
+async function announceMemberChange(member, joined) {
+  if (member.user?.bot) return;
+  const settings = await getGuildSettings(member.guild.id);
+  if (!settings?.welcomeChannelId) return;
+  const channel = await member.guild.channels.fetch(settings.welcomeChannelId);
+  if (!channel?.isTextBased()) throw new Error("welcome_channel_not_text");
+
+  if (joined) {
+    const embed = new EmbedBuilder()
+      .setColor(0x22d3ee)
+      .setTitle("¡Bienvenido al servidor!")
+      .setDescription(`Esperamos que disfrutes la comunidad, <@${member.id}>.`)
+      .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+      .setFooter({ text: `Ya somos ${member.guild.memberCount} miembros` })
+      .setTimestamp();
+    await channel.send({ content: `<@${member.id}>`, embeds: [embed], allowedMentions: { users: [member.id] } });
+    return;
+  }
+
+  const displayName = String(member.displayName || member.user?.globalName || member.user?.username || "Un miembro")
+    .replace(/([\\*_~|>`])/g, "\\$1");
+  const embed = new EmbedBuilder()
+    .setColor(0x8b5cf6)
+    .setTitle("Un miembro dejó el servidor")
+    .setDescription(`**${displayName}** se ha despedido de la comunidad.`)
+    .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+    .setFooter({ text: `${member.guild.memberCount} miembros en el servidor` })
+    .setTimestamp();
+  await channel.send({ embeds: [embed] });
 }
 
 function localDateParts(timeZone) {
@@ -221,13 +257,19 @@ async function startPixelBot() {
   if (client) return client;
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) { console.log("ℹ️ PixelBot disabled: DISCORD_BOT_TOKEN is not configured"); return null; }
-  client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
+  client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers] });
   client.once(Events.ClientReady, async ready => {
     console.log(`✅ PixelBot connected as ${ready.user.tag}`);
     await announceBirthdays();
     setInterval(() => announceBirthdays().catch(console.error), 15 * 60 * 1000).unref();
   });
   client.on(Events.GuildCreate, guild => ensureGuild({ guildId: guild.id, guildName: guild.name }).catch(console.error));
+  client.on(Events.GuildMemberAdd, member => announceMemberChange(member, true).catch(error => {
+    console.error(`PixelBot welcome message error (${member.guild.id}:${member.id}):`, error);
+  }));
+  client.on(Events.GuildMemberRemove, member => announceMemberChange(member, false).catch(error => {
+    console.error(`PixelBot farewell message error (${member.guild.id}:${member.id}):`, error);
+  }));
   client.on(Events.MessageCreate, message => handleMention(message).catch(error => {
     console.error("PixelBot mention error:", error);
   }));
