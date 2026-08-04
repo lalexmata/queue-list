@@ -147,11 +147,22 @@ router.all("/play", async (_req, res) => {
 router.all("/request", async (req, res) => {
   try {
     const source = { ...req.query, ...(req.body || {}) };
-    const input = source.url || source.youtubeUrl || source.videoId || source.input;
+    const input = String(source.url || source.youtubeUrl || source.videoId || source.input || "").trim();
+    if (!input) {
+      return res.json({
+        ok: false,
+        status: "missing_input",
+        error: "missing_song_input",
+        message: "Debes escribir el nombre de la canción o pegar una URL de YouTube. Ejemplo: !sr nombre de la canción",
+      });
+    }
     const requestedBy = String(
       source.requestedBy || source.uniqueId || source.uniqueid || source.username || source.user || ""
     ).trim();
-    if (!requestedBy) return res.status(400).json({ ok: false, error: "missing_requested_by" });
+    if (!requestedBy) return res.json({
+      ok: false, status: "missing_user", error: "missing_requested_by",
+      message: "No pude identificar quién solicitó la canción. Inténtalo nuevamente.",
+    });
 
     const song = await addSongRequest({
       input,
@@ -167,17 +178,25 @@ router.all("/request", async (req, res) => {
     const message = `${song.requesterDisplayName}: “${song.title}” fue agregada a la cola${position ? ` en la posición ${position}` : ""}.`;
     res.status(201).json({ ok: true, message, position, song });
   } catch (error) {
-    // Streamer.bot no siempre expande las propiedades JSON de respuestas HTTP 4xx.
-    // Un duplicado es un resultado esperado, por lo que se responde con HTTP 200.
-    if (error?.message === "song_already_queued") {
-      return res.json({
-        ok: false,
-        status: "already_in_queue",
-        error: "song_already_queued",
-        message: "Esa canci\u00f3n ya est\u00e1 en la cola.",
-      });
-    }
-    sendError(res, error);
+    // Streamer.bot puede ignorar el cuerpo de respuestas HTTP 4xx/5xx. Este endpoint
+    // siempre devuelve HTTP 200 y deja el resultado real en `ok`, `error` y `message`.
+    console.error("Song request integration error:", error);
+    const code = error?.status ? error.message : "db_error";
+    const messages = {
+      missing_song_input: "Debes escribir el nombre de la canción o pegar una URL de YouTube. Ejemplo: !sr nombre de la canción",
+      invalid_youtube_url: "La URL de YouTube no es válida.",
+      youtube_search_not_configured: "La búsqueda por nombre todavía no está configurada.",
+      youtube_search_failed: "YouTube no pudo completar la búsqueda en este momento.",
+      youtube_video_not_found: "No encontré una canción con ese nombre.",
+      song_already_queued: "Esa canción ya está en la cola.",
+      db_error: "No pude procesar la solicitud musical en este momento.",
+    };
+    return res.json({
+      ok: false,
+      status: code === "song_already_queued" ? "already_in_queue" : "error",
+      error: code,
+      message: messages[code] || messages.db_error,
+    });
   }
 });
 

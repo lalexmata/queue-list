@@ -164,6 +164,23 @@ router.put("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
   } catch (error) { sendError(res, error); }
 });
 
+// Atajo GET para Streamer.bot, cuya subacción Fetch URL no admite PUT.
+router.get("/birthdays/platforms/:platform/users/:userId/register", async (req, res) => {
+  try {
+    const birthday = await savePlatformBirthday({
+      platform: req.params.platform,
+      userId: req.params.userId,
+      displayName: req.query.displayName || req.params.userId,
+      day: req.query.day,
+      month: req.query.month,
+      year: req.query.year || null,
+      communityId: req.query.communityId || "",
+      profileId: req.query.profileId || null,
+    });
+    res.json({ ok: true, birthday, message: `🎂 Cumpleaños de ${birthday.displayName} guardado: ${birthday.day}/${birthday.month}.` });
+  } catch (error) { sendError(res, error); }
+});
+
 router.get("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
   try {
     const birthday = await getPlatformBirthday({
