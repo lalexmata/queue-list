@@ -64,14 +64,25 @@ async function getPlayerStats(rawName, rawTimeWindow = "lifetime") {
   const timeWindow = rawTimeWindow === "season" ? "season" : "lifetime";
   const params = new URLSearchParams({ name, accountType: "epic", timeWindow });
   let response;
-  try {
-    response = await fetch(`${FORTNITE_STATS_URL}?${params}`, {
-      headers: { Authorization: apiKey },
-      signal: AbortSignal.timeout(10000),
-    });
-  } catch (error) {
-    throw fail("fortnite_unavailable", 502, { cause: error });
+  let lastNetworkError;
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      response = await fetch(`${FORTNITE_STATS_URL}?${params}`, {
+        headers: { Authorization: apiKey },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (response.status < 500 || attempt === maxAttempts) break;
+      console.warn(JSON.stringify({ event: "fortnite_api_retry", attempt, status: response.status }));
+      await response.body?.cancel();
+    } catch (error) {
+      lastNetworkError = error;
+      if (attempt === maxAttempts) throw fail("fortnite_unavailable", 502, { cause: error });
+      console.warn(JSON.stringify({ event: "fortnite_api_retry", attempt, error: error?.message }));
+    }
+    await new Promise(resolve => setTimeout(resolve, attempt * 600));
   }
+  if (!response) throw fail("fortnite_unavailable", 502, { cause: lastNetworkError });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const status = response.status === 404 ? 404 : response.status === 403 ? 403 : 502;

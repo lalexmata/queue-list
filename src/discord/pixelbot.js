@@ -52,6 +52,9 @@ function commandContext(interaction, error) {
 function errorMessage(error) {
   return ({ player_not_found: "No encontré ese jugador de Epic.", player_stats_private: "Las estadísticas de ese jugador son privadas.",
     account_not_linked: "Primero usa `/fortnite vincular`.", fortnite_not_configured: "Falta configurar FORTNITE_API_KEY.",
+    fortnite_unavailable: "La API de Fortnite no está respondiendo. Inténtalo nuevamente en unos minutos.",
+    fortnite_api_error: "La API de Fortnite devolvió un error temporal. Inténtalo nuevamente en unos minutos.",
+    fortnite_rate_limited: "La API de Fortnite alcanzó temporalmente su límite de consultas.",
     invalid_birthday: "Esa fecha no es válida.", invalid_twitch_username: "Escribe un usuario válido de Twitch.",
     coupon_account_not_linked: "Primero usa `/cupones vincular` con tu usuario de Twitch.",
     no_active_giveaway: "En este momento no hay un sorteo activo." })[error.message] || "No pude completar la solicitud en este momento.";

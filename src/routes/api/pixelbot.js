@@ -18,6 +18,7 @@ function sendError(res, error) {
     invalid_player_name: "Escribe un nombre válido de Epic.", fortnite_not_configured: "La API de Fortnite todavía no está configurada.",
     player_not_found: "No encontré ese jugador.", player_stats_private: "Las estadísticas de ese jugador son privadas.",
     fortnite_rate_limited: "Se alcanzó temporalmente el límite de consultas.", fortnite_unavailable: "Fortnite-API no está disponible en este momento.",
+    fortnite_api_error: "Fortnite-API devolvió un error temporal. Inténtalo nuevamente en unos minutos.",
     invalid_birthday: "La fecha de cumpleaños no es válida.", invalid_birthday_query: "El mes o día consultado no es válido.",
     invalid_timezone: "La zona horaria no es válida.", invalid_birthday_platform: "La plataforma no es válida.",
     invalid_birthday_user: "El usuario de la plataforma no es válido.", birthday_community_required: "Discord requiere un communityId.",
