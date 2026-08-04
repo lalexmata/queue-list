@@ -3,6 +3,17 @@
 PixelBot comparte los servicios y la base de datos de esta aplicación. Si
 `DISCORD_BOT_TOKEN` está vacío, la web sigue funcionando y el bot no se inicia.
 
+Para levantar el proyecto local conservando el token pero sin conectar otra instancia
+a Discord, agrega esto al `.env` local:
+
+```env
+PIXELBOT_ENABLED=false
+```
+
+La web y las APIs seguirán funcionando; solo se omiten el login y los listeners de
+Discord. En producción usa `PIXELBOT_ENABLED=true` o no declares la variable, porque
+el valor predeterminado es activo.
+
 ## Preparación
 
 1. Ejecuta `migrations/add_pixelbot.sql` en Neon.
@@ -14,6 +25,7 @@ PixelBot comparte los servicios y la base de datos de esta aplicación. Si
 7. Configura en Railway:
 
 ```env
+PIXELBOT_ENABLED=true
 DISCORD_BOT_TOKEN=
 DISCORD_CLIENT_ID=
 FORTNITE_API_KEY=
@@ -70,3 +82,72 @@ Para consultar un cumpleaños vinculado a Discord:
 GET https://TU-DOMINIO/api/pixelbot/birthdays/GUILD_ID/DISCORD_USER_ID
 x-api-key: TU_INTEGRATION_API_KEY
 ```
+
+## Perfiles de comunidad y cumpleaños multiplataforma
+
+Discord, Twitch, YouTube y Kick utilizan el mismo perfil, sin tablas específicas por
+plataforma. El perfil reúne identidades, cumpleaños, sorteos, premios, cupones,
+solicitudes de canciones y presencia actual en la cola. Aplica primero la migración:
+
+```bash
+npm run migrate:community-profiles
+```
+
+Para registrar o actualizar un cumpleaños:
+
+```text
+PUT https://TU-DOMINIO/api/pixelbot/birthdays/platforms/PLATAFORMA/users/USUARIO
+x-api-key: TU_INTEGRATION_API_KEY
+Content-Type: application/json
+
+{"displayName":"USUARIO","day":15,"month":8}
+```
+
+`PLATAFORMA` acepta `discord`, `twitch`, `youtube` o `kick`. La respuesta incluye
+`message`, listo para enviarlo al chat. El año es opcional. Para Discord agrega
+`"communityId":"GUILD_ID"`; las otras plataformas también pueden usar
+`communityId` si se necesita separar comunidades.
+
+La primera identidad registrada crea un `profileId`. Para indicar que otra cuenta
+pertenece a la misma persona, registra esa identidad incluyendo el mismo identificador:
+
+```json
+{"profileId":42,"displayName":"OTRO_NOMBRE","day":15,"month":8}
+```
+
+El cumpleaños se guarda una sola vez en el perfil y cada identidad puede tener un
+nombre diferente. Los nombres iguales no se vinculan automáticamente, para evitar
+mezclar por error a personas distintas.
+
+Para consultar un usuario:
+
+```text
+GET https://TU-DOMINIO/api/pixelbot/birthdays/platforms/PLATAFORMA/users/USUARIO
+x-api-key: TU_INTEGRATION_API_KEY
+```
+
+Para consultar todas las identidades vinculadas a una persona:
+
+```text
+GET https://TU-DOMINIO/api/pixelbot/birthdays/profiles/PROFILE_ID
+x-api-key: TU_INTEGRATION_API_KEY
+```
+
+Para buscar una persona por cualquiera de sus nombres y consultar su ficha completa:
+
+```text
+GET https://TU-DOMINIO/api/pixelbot/community/profiles?q=USUARIO
+GET https://TU-DOMINIO/api/pixelbot/community/profiles/PROFILE_ID
+x-api-key: TU_INTEGRATION_API_KEY
+```
+
+Para obtener los próximos cumpleaños del mes actual en horario de Santiago:
+
+```text
+GET https://TU-DOMINIO/api/pixelbot/birthdays/platforms/PLATAFORMA?scope=upcoming
+x-api-key: TU_INTEGRATION_API_KEY
+```
+
+Usa `scope=month` para incluir también los cumpleaños que ya pasaron durante el
+mes. Se puede consultar otro mes con `month=1` a `month=12` y cambiar la zona
+horaria con `timezone=America/Santiago`.

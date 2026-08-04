@@ -6,7 +6,8 @@ function requireSocialAuth(req, res, next) {
   if (req.session && req.session.socialAuthed) {
     return next();
   }
-  res.redirect("/social/login");
+  const nextPath = req.originalUrl?.startsWith("/") ? req.originalUrl : "/";
+  res.redirect(`/social/login?next=${encodeURIComponent(nextPath)}`);
 }
 
 module.exports = { requireSocialAuth };

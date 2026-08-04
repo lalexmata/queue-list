@@ -6,6 +6,7 @@ const { getLatestGiveawayWithWinners } = require("../services/giveawayRounds.ser
 const {
   ensureGuild, getGuildSettings, updateGuildSettings, linkFortniteAccount, getFortniteAccount,
   saveBirthday, getBirthday, listBirthdays, listBirthdayGuilds,
+  listDiscordIdentitiesNeedingNames, updateDiscordIdentityName,
   claimBirthdayAnnouncements, releaseBirthdayAnnouncement,
   linkCouponAccount, getCouponAccount, getDiscordUsersForTwitch,
 } = require("../services/pixelbot.service");
@@ -69,6 +70,7 @@ async function handleBirthday(interaction) {
   const sub = interaction.options.getSubcommand();
   if (sub === "registrar") {
     const birthday = await saveBirthday({ guildId: interaction.guildId, discordUserId: interaction.user.id,
+      displayName: interaction.member?.displayName || interaction.user.globalName || interaction.user.username,
       day: interaction.options.getInteger("dia", true), month: interaction.options.getInteger("mes", true), year: interaction.options.getInteger("ano") });
     return interaction.reply({ content: `Guardé tu cumpleaños: **${birthday.day}/${birthday.month}**.`, ephemeral: true });
   }
@@ -84,6 +86,21 @@ async function handleBirthday(interaction) {
   }
   const birthday = await getBirthday(interaction.guildId, interaction.user.id);
   return interaction.reply({ content: birthday ? `Tu cumpleaños registrado es **${birthday.day}/${birthday.month}**.` : "No tienes un cumpleaños registrado.", ephemeral: true });
+}
+
+async function syncDiscordIdentityNames() {
+  const identities = await listDiscordIdentitiesNeedingNames();
+  for (const identity of identities) {
+    try {
+      const guild = client.guilds.cache.get(identity.guildId) || await client.guilds.fetch(identity.guildId);
+      const member = await guild.members.fetch(identity.discordUserId);
+      await updateDiscordIdentityName({
+        ...identity, displayName: member.displayName || member.user.globalName || member.user.username,
+      });
+    } catch (error) {
+      console.warn(`PixelBot could not resolve Discord name (${identity.guildId}:${identity.discordUserId}):`, error.message);
+    }
+  }
 }
 
 async function handleCoupons(interaction) {
@@ -255,11 +272,17 @@ async function handleMention(message) {
 
 async function startPixelBot() {
   if (client) return client;
+  const enabled = !["0", "false", "no", "off"].includes(String(process.env.PIXELBOT_ENABLED ?? "true").trim().toLowerCase());
+  if (!enabled) {
+    console.log("ℹ️ PixelBot disabled by PIXELBOT_ENABLED");
+    return null;
+  }
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) { console.log("ℹ️ PixelBot disabled: DISCORD_BOT_TOKEN is not configured"); return null; }
   client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers] });
   client.once(Events.ClientReady, async ready => {
     console.log(`✅ PixelBot connected as ${ready.user.tag}`);
+    await syncDiscordIdentityNames();
     await announceBirthdays();
     setInterval(() => announceBirthdays().catch(console.error), 15 * 60 * 1000).unref();
   });
@@ -277,6 +300,10 @@ async function startPixelBot() {
     if (!interaction.isChatInputCommand() || !interaction.guildId) return;
     try {
       await ensureGuild({ guildId: interaction.guildId, guildName: interaction.guild?.name });
+      await updateDiscordIdentityName({
+        guildId: interaction.guildId, discordUserId: interaction.user.id,
+        displayName: interaction.member?.displayName || interaction.user.globalName || interaction.user.username,
+      });
       if (interaction.commandName !== "pixelbot" && !await allowed(interaction)) return;
       if (interaction.commandName === "fortnite") await handleFortnite(interaction);
       if (interaction.commandName === "cumpleanos") await handleBirthday(interaction);

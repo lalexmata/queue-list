@@ -22,15 +22,26 @@ CREATE TABLE IF NOT EXISTS fortnite_accounts (
   PRIMARY KEY (guild_id, discord_user_id)
 );
 
-CREATE TABLE IF NOT EXISTS discord_birthdays (
-  guild_id TEXT NOT NULL REFERENCES discord_guild_settings(guild_id) ON DELETE CASCADE,
-  discord_user_id TEXT NOT NULL,
-  birth_month SMALLINT NOT NULL CHECK (birth_month BETWEEN 1 AND 12),
-  birth_day SMALLINT NOT NULL CHECK (birth_day BETWEEN 1 AND 31),
+CREATE TABLE IF NOT EXISTS community_profiles (
+  id BIGSERIAL PRIMARY KEY,
+  display_name TEXT,
+  notes TEXT,
+  birth_month SMALLINT CHECK (birth_month BETWEEN 1 AND 12),
+  birth_day SMALLINT CHECK (birth_day BETWEEN 1 AND 31),
   birth_year SMALLINT CHECK (birth_year BETWEEN 1900 AND 2100),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS community_identities (
+  profile_id BIGINT NOT NULL REFERENCES community_profiles(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('discord', 'twitch', 'youtube', 'kick', 'tiktok', 'facebook', 'instagram', 'other')),
+  community_id TEXT NOT NULL DEFAULT '',
+  platform_user_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (guild_id, discord_user_id)
+  PRIMARY KEY (platform, community_id, platform_user_id)
 );
 
 CREATE TABLE IF NOT EXISTS birthday_announcements (
@@ -41,5 +52,8 @@ CREATE TABLE IF NOT EXISTS birthday_announcements (
   PRIMARY KEY (guild_id, discord_user_id, announcement_date)
 );
 
-CREATE INDEX IF NOT EXISTS discord_birthdays_date_idx
-  ON discord_birthdays (birth_month, birth_day);
+CREATE INDEX IF NOT EXISTS community_profiles_date_idx
+  ON community_profiles (birth_month, birth_day);
+
+CREATE INDEX IF NOT EXISTS community_identities_profile_idx
+  ON community_identities (profile_id);

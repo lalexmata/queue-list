@@ -1,8 +1,9 @@
 const { pool } = require("../database/db");
+const { findOrCreateCommunityProfile } = require("./community-profile.service");
 
 const SOURCES = ["channel_points", "subscriber", "gifted_subs", "purchase"];
 const PARTICIPANT_COLUMNS = `
-  p.id, p.giveaway_id AS "giveawayId", p.username, p.display_name AS "displayName", p.platform,
+  p.id, p.profile_id AS "profileId", p.giveaway_id AS "giveawayId", p.username, p.display_name AS "displayName", p.platform,
   COALESCE(SUM(s.coupon_count), 0)::int AS "couponCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'channel_points'), 0)::int AS "channelPointsCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'subscriber'), 0)::int AS "subscriberCount",
@@ -118,13 +119,16 @@ async function setGiveawayActive(isActive) {
 async function upsertCoupons(db, rawParticipant) {
   const item = normalizeParticipant(rawParticipant);
   const giveawayId = await getActiveGiveawayId(db);
+  const profileId = await findOrCreateCommunityProfile(db, {
+    platform: item.platform, userId: item.username, displayName: item.displayName,
+  });
   const { rows } = await db.query(
-    `INSERT INTO giveaway_participants (giveaway_id, username, display_name, platform, coupon_count)
-     VALUES ($1, $2, $3, $4, 0)
+    `INSERT INTO giveaway_participants (giveaway_id, profile_id, username, display_name, platform, coupon_count)
+     VALUES ($1, $2, $3, $4, $5, 0)
      ON CONFLICT (giveaway_id, LOWER(platform), LOWER(username)) DO UPDATE SET
-       display_name = EXCLUDED.display_name, updated_at = NOW()
+       profile_id = EXCLUDED.profile_id, display_name = EXCLUDED.display_name, updated_at = NOW()
      RETURNING id`,
-    [giveawayId, item.username, item.displayName, item.platform]
+    [giveawayId, profileId, item.username, item.displayName, item.platform]
   );
   const participantId = rows[0].id;
   if (item.source === "subscriber") {

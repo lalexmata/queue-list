@@ -8,7 +8,8 @@ const PAGES = path.join(__dirname, "../../pages");
 // Login page (pública)
 router.get("/login", (req, res) => {
   if (req.session && req.session.socialAuthed) {
-    return res.redirect("/social/upload");
+    const nextPath = String(req.query.next || "");
+    return res.redirect(nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/social/upload");
   }
   res.sendFile(path.join(PAGES, "social-login.html"));
 });
@@ -16,6 +17,8 @@ router.get("/login", (req, res) => {
 // POST login
 router.post("/login", (req, res) => {
   const { password } = req.body;
+  const nextPath = String(req.body.next || "");
+  const destination = nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/social/upload";
   const SOCIAL_PASSWORD = process.env.SOCIAL_ADMIN_PASSWORD;
 
   if (!SOCIAL_PASSWORD) {
@@ -24,10 +27,10 @@ router.post("/login", (req, res) => {
 
   if (password === SOCIAL_PASSWORD) {
     req.session.socialAuthed = true;
-    return res.redirect("/social/upload");
+    return res.redirect(destination);
   }
 
-  res.redirect("/social/login?error=1");
+  res.redirect(`/social/login?error=1&next=${encodeURIComponent(destination)}`);
 });
 
 // Logout

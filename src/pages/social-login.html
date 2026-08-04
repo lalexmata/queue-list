@@ -96,6 +96,7 @@
     <div class="error-msg" id="errorMsg">Contraseña incorrecta. Inténtalo de nuevo.</div>
 
     <form method="POST" action="/social/login">
+      <input type="hidden" name="next" id="nextPath" value="">
       <input type="password" name="password" placeholder="Contraseña" autofocus required />
       <button type="submit">Entrar</button>
     </form>
@@ -103,6 +104,7 @@
 
   <script>
     const params = new URLSearchParams(location.search);
+    document.getElementById("nextPath").value = params.get("next") || "";
     if (params.get("error")) {
       document.getElementById("errorMsg").classList.add("visible");
     }

@@ -7,6 +7,7 @@ function safeEqual(left, right) {
 }
 
 function requireIntegrationKey(req, res, next) {
+  if (req.session?.socialAuthed) return next();
   const configured = process.env.INTEGRATION_API_KEY || process.env.ADMIN_KEY;
   if (!configured) return res.status(503).json({ ok: false, error: "integration_key_not_configured" });
   const provided = req.get("x-api-key") || req.query.apiKey || req.body?.apiKey;

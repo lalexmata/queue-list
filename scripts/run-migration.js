@@ -28,7 +28,7 @@ async function main() {
         `SELECT table_name
          FROM information_schema.tables
          WHERE table_schema = 'public'
-           AND table_name IN ('discord_guild_settings', 'fortnite_accounts', 'discord_birthdays', 'birthday_announcements')
+           AND table_name IN ('discord_guild_settings', 'fortnite_accounts', 'community_profiles', 'community_identities', 'birthday_announcements')
          ORDER BY table_name`
       );
       console.log(`Tablas verificadas: ${rows.map(row => row.table_name).join(", ")}`);

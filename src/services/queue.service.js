@@ -1,9 +1,10 @@
 const { pool } = require('../database/db');
 const {normalizeRole, ROLE_BLOCK} = require('../helpers/helpers');
+const { findOrCreateCommunityProfile } = require('./community-profile.service');
 
 async function getQueue() {
   const { rows } = await pool.query(
-    `SELECT unique_id AS "uniqueId",
+    `SELECT profile_id AS "profileId", unique_id AS "uniqueId",
             nickname,
             role,
             is_sub AS "isSub",
@@ -36,6 +37,9 @@ async function upsertByPriority(user) {
     await client.query("BEGIN");
     // Serializa canjes simultáneos del mismo usuario, ignorando mayúsculas.
     await client.query("SELECT pg_advisory_xact_lock(hashtext(lower($1)))", [user.uniqueId]);
+    const profileId = await findOrCreateCommunityProfile(client, {
+      platform: user.platform || "other", userId: user.uniqueId, displayName: user.nickname || user.uniqueId,
+    });
     const existing = await client.query(
       `SELECT unique_id, position
        FROM queue_items
@@ -48,7 +52,7 @@ async function upsertByPriority(user) {
     if (existing.rows[0]) {
       await client.query(
         `UPDATE queue_items
-         SET nickname = $2, role = $3, is_sub = $4, platform = $5
+         SET nickname = $2, role = $3, is_sub = $4, platform = $5, profile_id = $6
          WHERE unique_id = $1`,
         [
           existing.rows[0].unique_id,
@@ -56,6 +60,7 @@ async function upsertByPriority(user) {
           role,
           role === "subscriber",
           user.platform || "unknown",
+          profileId,
         ]
       );
       await client.query("COMMIT");
@@ -70,9 +75,9 @@ async function upsertByPriority(user) {
     );
     const nextPos = Number(rows[0].maxpos) + 1;
     await client.query(
-      `INSERT INTO queue_items (unique_id, nickname, role, is_sub, platform, ts, position)
-       VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
-      [user.uniqueId, user.nickname, role, role === "subscriber", user.platform || "unknown", nextPos]
+      `INSERT INTO queue_items (profile_id, unique_id, nickname, role, is_sub, platform, ts, position)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)`,
+      [profileId, user.uniqueId, user.nickname, role, role === "subscriber", user.platform || "unknown", nextPos]
     );
     await client.query("COMMIT");
     return { added: true, position: nextPos };
@@ -86,7 +91,7 @@ async function upsertByPriority(user) {
 
 async function getQueueWithPosition() {
   const { rows } = await pool.query(
-    `SELECT unique_id AS "uniqueId",
+    `SELECT profile_id AS "profileId", unique_id AS "uniqueId",
             nickname,
             role,
             is_sub AS "isSub",

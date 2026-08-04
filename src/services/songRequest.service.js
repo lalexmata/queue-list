@@ -1,8 +1,10 @@
 const { pool } = require("../database/db");
 const { parseYouTubeId, parseYouTubePlaylistId } = require("../helpers/youtube.helper");
+const { findOrCreateCommunityProfile } = require("./community-profile.service");
 
 const SONG_COLUMNS = `
   id,
+  profile_id AS "profileId",
   youtube_id AS "youtubeId",
   youtube_url AS "youtubeUrl",
   title,
@@ -84,22 +86,31 @@ async function addSongRequest({ input, requestedBy, requesterDisplayName, platfo
   const metadata = await fetchYouTubeMetadata(youtubeId);
   const youtubeUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
 
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
+    await client.query("BEGIN");
+    const profileId = await findOrCreateCommunityProfile(client, {
+      platform, userId: requestedBy, displayName: requesterDisplayName || requestedBy,
+    });
+    const { rows } = await client.query(
       `INSERT INTO song_requests
-        (youtube_id, youtube_url, title, thumbnail_url, requested_by, requester_display_name, platform, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7,
+        (profile_id, youtube_id, youtube_url, title, thumbnail_url, requested_by, requester_display_name, platform, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
          (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM song_requests))
        RETURNING ${SONG_COLUMNS}`,
-      [youtubeId, youtubeUrl, metadata.title, metadata.thumbnailUrl, requestedBy,
+      [profileId, youtubeId, youtubeUrl, metadata.title, metadata.thumbnailUrl, requestedBy,
         requesterDisplayName || requestedBy, platform]
     );
+    await client.query("COMMIT");
     return rows[0];
   } catch (error) {
+    await client.query("ROLLBACK");
     if (error.code === "23505") {
       throw Object.assign(new Error("song_already_queued"), { status: 409 });
     }
     throw error;
+  } finally {
+    client.release();
   }
 }
 

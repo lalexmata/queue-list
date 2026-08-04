@@ -66,38 +66,52 @@ async function getFortniteAccount(guildId, discordUserId) {
   return rows[0] || null;
 }
 
-async function saveBirthday({ guildId, discordUserId, day, month, year = null }) {
+async function saveBirthday({ guildId, discordUserId, displayName = null, day, month, year = null }) {
   await ensureGuild({ guildId });
-  const date = new Date(Date.UTC(year || 2000, Number(month) - 1, Number(day)));
-  if (date.getUTCMonth() + 1 !== Number(month) || date.getUTCDate() !== Number(day)) {
-    throw Object.assign(new Error("invalid_birthday"), { status: 400 });
-  }
+  return savePlatformBirthday({
+    platform: "discord", userId: discordUserId, communityId: guildId, displayName, day, month, year,
+  });
+}
+
+async function listDiscordIdentitiesNeedingNames() {
   const { rows } = await pool.query(
-    `INSERT INTO discord_birthdays (guild_id, discord_user_id, birth_day, birth_month, birth_year)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (guild_id, discord_user_id) DO UPDATE
-       SET birth_day = EXCLUDED.birth_day, birth_month = EXCLUDED.birth_month, birth_year = EXCLUDED.birth_year, updated_at = NOW()
-     RETURNING birth_day AS day, birth_month AS month, birth_year AS year`,
-    [String(guildId), String(discordUserId), Number(day), Number(month), year ? Number(year) : null]
+    `SELECT community_id AS "guildId", platform_user_id AS "discordUserId"
+     FROM community_identities
+     WHERE platform = 'discord' AND display_name = platform_user_id`
   );
-  return rows[0];
+  return rows;
+}
+
+async function updateDiscordIdentityName({ guildId, discordUserId, displayName }) {
+  const name = String(displayName || "").trim().slice(0, 100);
+  if (!name) return null;
+  const { rows } = await pool.query(
+    `UPDATE community_identities i SET display_name = $3, updated_at = NOW()
+     WHERE i.platform = 'discord' AND i.community_id = $1 AND i.platform_user_id = $2
+     RETURNING i.profile_id AS "profileId"`,
+    [String(guildId), String(discordUserId), name]
+  );
+  if (rows[0]) {
+    await pool.query(
+      `UPDATE community_profiles SET display_name = $2, updated_at = NOW()
+       WHERE id = $1 AND (display_name IS NULL OR display_name ~ '^\\d+$')`,
+      [rows[0].profileId, name]
+    );
+  }
+  return rows[0] || null;
 }
 
 async function getBirthday(guildId, discordUserId) {
-  const { rows } = await pool.query(
-    `SELECT birth_day AS day, birth_month AS month, birth_year AS year
-     FROM discord_birthdays WHERE guild_id = $1 AND discord_user_id = $2`,
-    [String(guildId), String(discordUserId)]
-  );
-  return rows[0] || null;
+  return getPlatformBirthday({ platform: "discord", userId: discordUserId, communityId: guildId });
 }
 
 async function listBirthdays(guildId) {
   const { rows } = await pool.query(
-    `SELECT discord_user_id AS "discordUserId", birth_day AS day, birth_month AS month
-     FROM discord_birthdays
-     WHERE guild_id = $1
-     ORDER BY birth_month, birth_day, discord_user_id`,
+    `SELECT i.platform_user_id AS "discordUserId", p.birth_day AS day, p.birth_month AS month
+     FROM community_identities i
+     JOIN community_profiles p ON p.id = i.profile_id
+     WHERE i.platform = 'discord' AND i.community_id = $1
+     ORDER BY p.birth_month, p.birth_day, i.platform_user_id`,
     [String(guildId)]
   );
   return rows;
@@ -117,9 +131,11 @@ async function claimBirthdayAnnouncements({ guildId, year, month, day }) {
   const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   const { rows } = await pool.query(
     `INSERT INTO birthday_announcements (guild_id, discord_user_id, announcement_date)
-     SELECT b.guild_id, b.discord_user_id, $4::date
-     FROM discord_birthdays b
-     WHERE b.guild_id = $1 AND b.birth_month = $2 AND b.birth_day = $3
+     SELECT i.community_id, i.platform_user_id, $4::date
+     FROM community_identities i
+     JOIN community_profiles p ON p.id = i.profile_id
+     WHERE i.platform = 'discord' AND i.community_id = $1
+       AND p.birth_month = $2 AND p.birth_day = $3
      ON CONFLICT (guild_id, discord_user_id, announcement_date) DO NOTHING
      RETURNING discord_user_id AS "discordUserId"`,
     [String(guildId), Number(month), Number(day), date]
@@ -141,6 +157,189 @@ function cleanTwitchUsername(value) {
     throw Object.assign(new Error("invalid_twitch_username"), { status: 400 });
   }
   return username;
+}
+
+const BIRTHDAY_PLATFORMS = new Set(["discord", "twitch", "youtube", "kick"]);
+
+function cleanBirthdayIdentity(platformValue, userIdValue) {
+  const platform = String(platformValue || "").trim().toLowerCase();
+  if (!BIRTHDAY_PLATFORMS.has(platform)) {
+    throw Object.assign(new Error("invalid_birthday_platform"), { status: 400 });
+  }
+  let userId = String(userIdValue || "").trim();
+  if (platform === "twitch" || platform === "kick") userId = userId.replace(/^@+/, "").toLowerCase();
+  const valid = platform === "discord" ? /^\d{1,30}$/.test(userId)
+    : platform === "twitch" ? /^[a-z0-9_]{1,25}$/.test(userId)
+      : platform === "kick" ? /^[a-z0-9_-]{1,30}$/.test(userId)
+        : /^[a-zA-Z0-9_@.-]{1,100}$/.test(userId);
+  if (!valid) throw Object.assign(new Error("invalid_birthday_user"), { status: 400 });
+  return { platform, userId };
+}
+
+function validateBirthday(day, month, year = null) {
+  const numericDay = Number(day);
+  const numericMonth = Number(month);
+  const numericYear = year ? Number(year) : null;
+  if (numericYear !== null && (!Number.isInteger(numericYear) || numericYear < 1900 || numericYear > 2100)) {
+    throw Object.assign(new Error("invalid_birthday"), { status: 400 });
+  }
+  const date = new Date(Date.UTC(numericYear || 2000, numericMonth - 1, numericDay));
+  if (!Number.isInteger(numericDay) || !Number.isInteger(numericMonth)
+    || date.getUTCMonth() + 1 !== numericMonth || date.getUTCDate() !== numericDay) {
+    throw Object.assign(new Error("invalid_birthday"), { status: 400 });
+  }
+  return { day: numericDay, month: numericMonth, year: numericYear };
+}
+
+async function savePlatformBirthday({
+  platform: rawPlatform, userId: rawUserId, communityId = "", displayName,
+  day, month, year = null, profileId = null,
+}) {
+  const { platform, userId } = cleanBirthdayIdentity(rawPlatform, rawUserId);
+  const birthday = validateBirthday(day, month, year);
+  const scopedCommunityId = String(communityId || "").trim();
+  if (platform === "discord" && !scopedCommunityId) {
+    throw Object.assign(new Error("birthday_community_required"), { status: 400 });
+  }
+  const visibleName = String(displayName || rawUserId || userId).trim().replace(/^@+/, "").slice(0, 100) || userId;
+  const requestedProfileId = profileId === null || profileId === undefined ? null : Number(profileId);
+  if (requestedProfileId !== null && (!Number.isSafeInteger(requestedProfileId) || requestedProfileId < 1)) {
+    throw Object.assign(new Error("invalid_birthday_profile"), { status: 400 });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const identityResult = await client.query(
+      `SELECT profile_id AS "profileId" FROM community_identities
+       WHERE platform = $1 AND community_id = $2 AND platform_user_id = $3
+       FOR UPDATE`,
+      [platform, scopedCommunityId, userId]
+    );
+    const sameAccountResult = identityResult.rows.length ? identityResult : await client.query(
+      `SELECT profile_id AS "profileId" FROM community_identities
+       WHERE LOWER(REGEXP_REPLACE(platform_user_id, '[^a-z0-9]', '', 'g')) =
+             LOWER(REGEXP_REPLACE($1, '[^a-z0-9]', '', 'g'))
+       ORDER BY created_at LIMIT 1 FOR UPDATE`,
+      [userId]
+    );
+    const previousProfileId = identityResult.rows[0]?.profileId || null;
+    const knownAccountProfileId = sameAccountResult.rows[0]?.profileId || null;
+    let targetProfileId = requestedProfileId || knownAccountProfileId;
+
+    if (requestedProfileId) {
+      const target = await client.query("SELECT id FROM community_profiles WHERE id = $1 FOR UPDATE", [requestedProfileId]);
+      if (!target.rows.length) throw Object.assign(new Error("birthday_profile_not_found"), { status: 404 });
+    }
+    if (!targetProfileId) {
+      const created = await client.query(
+        `INSERT INTO community_profiles (display_name, birth_day, birth_month, birth_year)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [visibleName, birthday.day, birthday.month, birthday.year]
+      );
+      targetProfileId = created.rows[0].id;
+    } else {
+      await client.query(
+        `UPDATE community_profiles SET display_name = CASE
+           WHEN display_name IS NULL OR display_name ~ '^\\d+$' THEN $5 ELSE display_name END,
+         birth_day = $2, birth_month = $3, birth_year = $4, updated_at = NOW()
+         WHERE id = $1`,
+        [targetProfileId, birthday.day, birthday.month, birthday.year, visibleName]
+      );
+    }
+
+    await client.query(
+      `INSERT INTO community_identities (profile_id, platform, community_id, platform_user_id, display_name)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (platform, community_id, platform_user_id) DO UPDATE
+         SET profile_id = EXCLUDED.profile_id, display_name = EXCLUDED.display_name, updated_at = NOW()`,
+      [targetProfileId, platform, scopedCommunityId, userId, visibleName]
+    );
+    if (previousProfileId && previousProfileId !== targetProfileId) {
+      await client.query(
+        `DELETE FROM community_profiles p WHERE p.id = $1
+         AND NOT EXISTS (SELECT 1 FROM community_identities i WHERE i.profile_id = p.id)`,
+        [previousProfileId]
+      );
+    }
+    await client.query("COMMIT");
+    const profile = await getBirthdayProfile(targetProfileId, client);
+    return { ...profile, platform, communityId: scopedCommunityId, userId, displayName: visibleName };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function getPlatformBirthday({ platform: rawPlatform, userId: rawUserId, communityId = "" }) {
+  const { platform, userId } = cleanBirthdayIdentity(rawPlatform, rawUserId);
+  const scope = String(communityId || "").trim();
+  const { rows } = await pool.query(
+    `SELECT i.profile_id AS "profileId", i.platform, i.community_id AS "communityId",
+            i.platform_user_id AS "userId", i.display_name AS "displayName",
+            p.birth_day AS day, p.birth_month AS month, p.birth_year AS year,
+            (SELECT COUNT(*)::int FROM community_identities all_i WHERE all_i.profile_id = i.profile_id) AS "identityCount",
+            EXISTS (SELECT 1 FROM community_identities other_i
+                    WHERE other_i.profile_id = i.profile_id AND other_i.platform <> i.platform) AS "hasOtherPlatforms",
+            (i.platform = 'discord' AND i.display_name = i.platform_user_id) AS "unresolvedDisplayName"
+     FROM community_identities i
+     JOIN community_profiles p ON p.id = i.profile_id
+     WHERE i.platform = $1 AND ($2 = '' OR i.community_id = $2) AND i.platform_user_id = $3
+     ORDER BY CASE WHEN i.community_id = $2 THEN 0 ELSE 1 END, i.created_at
+     LIMIT 1`,
+    [platform, scope, userId]
+  );
+  return rows[0] || null;
+}
+
+async function getBirthdayProfile(rawProfileId, queryable = pool) {
+  const profileId = Number(rawProfileId);
+  if (!Number.isSafeInteger(profileId) || profileId < 1) {
+    throw Object.assign(new Error("invalid_birthday_profile"), { status: 400 });
+  }
+  const { rows } = await queryable.query(
+    `SELECT p.id AS "profileId", p.birth_day AS day, p.birth_month AS month, p.birth_year AS year,
+            COALESCE(json_agg(json_build_object(
+              'platform', i.platform, 'communityId', i.community_id, 'userId', i.platform_user_id,
+              'displayName', i.display_name
+            ) ORDER BY i.platform, LOWER(i.display_name)) FILTER (WHERE i.profile_id IS NOT NULL), '[]') AS identities
+     FROM community_profiles p
+     LEFT JOIN community_identities i ON i.profile_id = p.id
+     WHERE p.id = $1
+     GROUP BY p.id`,
+    [profileId]
+  );
+  return rows[0] || null;
+}
+
+async function listPlatformBirthdaysByMonth({ platform: rawPlatform, communityId = "", month, fromDay = 1 }) {
+  const platform = String(rawPlatform || "").trim().toLowerCase();
+  if (!BIRTHDAY_PLATFORMS.has(platform)) {
+    throw Object.assign(new Error("invalid_birthday_platform"), { status: 400 });
+  }
+  const numericMonth = Number(month);
+  const numericDay = Number(fromDay);
+  if (!Number.isInteger(numericMonth) || numericMonth < 1 || numericMonth > 12
+    || !Number.isInteger(numericDay) || numericDay < 1 || numericDay > 31) {
+    throw Object.assign(new Error("invalid_birthday_query"), { status: 400 });
+  }
+  const { rows } = await pool.query(
+    `SELECT i.profile_id AS "profileId", i.platform, i.community_id AS "communityId",
+            i.platform_user_id AS "userId", i.display_name AS "displayName",
+            p.birth_day AS day, p.birth_month AS month,
+            (SELECT COUNT(*)::int FROM community_identities all_i WHERE all_i.profile_id = i.profile_id) AS "identityCount",
+            EXISTS (SELECT 1 FROM community_identities other_i
+                    WHERE other_i.profile_id = i.profile_id AND other_i.platform <> i.platform) AS "hasOtherPlatforms",
+            (i.platform = 'discord' AND i.display_name = i.platform_user_id) AS "unresolvedDisplayName"
+     FROM community_identities i
+     JOIN community_profiles p ON p.id = i.profile_id
+     WHERE i.platform = $1 AND ($2 = '' OR i.community_id = $2) AND p.birth_month = $3 AND p.birth_day >= $4
+     ORDER BY p.birth_day, LOWER(i.display_name), i.platform_user_id`,
+    [platform, String(communityId || "").trim(), numericMonth, numericDay]
+  );
+  return rows;
 }
 
 async function linkCouponAccount({ guildId, discordUserId, twitchUsername }) {
@@ -181,6 +380,8 @@ async function getDiscordUsersForTwitch(guildId, usernames) {
 module.exports = {
   ensureGuild, getGuildSettings, listGuildSettings, updateGuildSettings, linkFortniteAccount, getFortniteAccount,
   saveBirthday, getBirthday, listBirthdays, listBirthdayGuilds,
+  listDiscordIdentitiesNeedingNames, updateDiscordIdentityName,
   claimBirthdayAnnouncements, releaseBirthdayAnnouncement,
   linkCouponAccount, getCouponAccount, getDiscordUsersForTwitch,
+  savePlatformBirthday, getPlatformBirthday, getBirthdayProfile, listPlatformBirthdaysByMonth,
 };
