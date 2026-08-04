@@ -103,6 +103,26 @@ async function syncDiscordIdentityNames() {
   }
 }
 
+async function searchDiscordGuildMembers(guildId, query, limit = 25) {
+  const term = String(query || "").trim();
+  if (term.length < 2) throw Object.assign(new Error("invalid_discord_member_search"), { status: 400 });
+  if (!client?.isReady()) throw Object.assign(new Error("pixelbot_not_connected"), { status: 503 });
+
+  const guild = client.guilds.cache.get(String(guildId)) || await client.guilds.fetch(String(guildId));
+  const members = await guild.members.fetch({ query: term, limit: Math.min(Math.max(Number(limit) || 25, 1), 50) });
+  return [...members.values()]
+    .filter(member => !member.user.bot)
+    .map(member => ({
+      userId: member.id,
+      username: member.user.username,
+      globalName: member.user.globalName || null,
+      displayName: member.displayName || member.user.globalName || member.user.username,
+      avatarUrl: member.displayAvatarURL({ size: 64 }),
+      guildId: guild.id,
+      guildName: guild.name,
+    }));
+}
+
 async function handleCoupons(interaction) {
   const sub = interaction.options.getSubcommand();
   if (sub === "vincular") {
@@ -328,4 +348,4 @@ async function startPixelBot() {
   return client;
 }
 
-module.exports = { startPixelBot };
+module.exports = { startPixelBot, searchDiscordGuildMembers };

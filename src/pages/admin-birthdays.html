@@ -112,8 +112,10 @@
             <label>Plataforma<select id="identityPlatform"><option value="twitch">Twitch</option><option value="discord">Discord</option><option value="youtube">YouTube</option><option value="kick">Kick</option><option value="tiktok">TikTok</option></select></label>
             <label>Usuario o ID<input id="identityUserId" required maxlength="100"></label>
             <label>Nombre visible<input id="identityDisplayName" required maxlength="100"></label>
-            <label>Servidor / comunidad<input id="identityCommunityId" placeholder="Solo si corresponde"></label>
+            <label id="identityGuildField">Servidor(es) de Discord<select id="identityCommunityId" multiple size="4"></select><small style="color:var(--muted);font-weight:500">Puedes seleccionar varios con Ctrl/Cmd.</small></label>
+            <label id="identityMemberField">Buscar miembro<input id="identityMemberQuery" minlength="2" placeholder="Apodo o usuario de Discord"><small style="color:var(--muted);font-weight:500">Busca dentro de los servidores seleccionados.</small></label>
           </div><div class="actions"><button class="primary" type="submit">Vincular identidad</button></div><p id="identityStatus" class="status"></p></form>
+          <div id="identityMemberResults" class="history"></div>
         </section>
       </dialog>
 
@@ -151,6 +153,7 @@
     for (const id of ['month','filterMonth','editMonth']) monthNames.forEach((name,index) => $(id).add(new Option(name,String(index+1))));
     $('filterMonth').value = String(new Date().getMonth()+1);
     let currentProfile=null;
+    let discordGuilds=[];
     function queryCommunity(id) { const value=$(id).value.trim(); return value ? `?communityId=${encodeURIComponent(value)}` : ''; }
     function setStatus(id,message,type='') { const el=$(id); el.textContent=message; el.className=`status ${type}`; }
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char])); }
@@ -162,7 +165,7 @@
       return data;
     }
     const platformIcons={twitch:'🟣',discord:'🔵',youtube:'🔴',kick:'🟢',tiktok:'⚫',facebook:'🔷',instagram:'🟠',other:'⚪'};
-    function identityLabel(identity) { return `${platformIcons[identity.platform]||'⚪'} ${identity.platform}: ${identity.displayName || identity.userId}`; }
+    function identityLabel(identity) { return `${platformIcons[identity.platform]||'⚪'} ${identity.platform}: ${identity.displayName || identity.userId}${identity.communityName?` · ${identity.communityName}`:''}`; }
     function renderProfile(profile) {
       const identities=profile.identities || [{platform:profile.platform,userId:profile.userId,displayName:profile.displayName}];
       const linked=profile.hasOtherPlatforms||Number(profile.identityCount)>1;
@@ -195,7 +198,25 @@
     async function openFullProfile(id) { const data=await request(`/api/pixelbot/community/profiles/${id}`); currentProfile=data.profile; $('globalResults').innerHTML=renderFullProfile(currentProfile); bindProfileActions(); }
     function bindProfileActions(){
       $('editCurrentProfile').addEventListener('click',()=>{ $('editProfileName').value=currentProfile.displayName||''; $('editProfileNotes').value=currentProfile.notes||''; $('editDay').value=currentProfile.day||''; $('editMonth').value=currentProfile.month||''; $('editYear').value=currentProfile.year||''; setStatus('profileStatus',''); $('profileEditor').showModal(); });
-      $('linkCurrentIdentity').addEventListener('click',()=>{ $('identityForm').reset(); setStatus('identityStatus',''); $('identityEditor').showModal(); });
+      $('linkCurrentIdentity').addEventListener('click',async()=>{ $('identityForm').reset(); setStatus('identityStatus',''); try{await loadDiscordGuilds();updateIdentityGuildVisibility();$('identityEditor').showModal();}catch(error){$('globalResults').insertAdjacentHTML('afterbegin',`<div class="status error">${escapeHtml(error.message)}</div>`);} });
+    }
+    async function loadDiscordGuilds(){
+      if(discordGuilds.length)return;
+      const data=await request('/api/pixelbot/community/discord-guilds');discordGuilds=data.guilds||[];
+      $('identityCommunityId').innerHTML=discordGuilds.length?discordGuilds.map(guild=>`<option value="${escapeHtml(guild.guildId)}">${escapeHtml(guild.guildName||guild.guildId)}</option>`).join(''):'<option disabled>No hay servidores registrados</option>';
+    }
+    function updateIdentityGuildVisibility(){const discord=$('identityPlatform').value==='discord';$('identityGuildField').style.display=discord?'grid':'none';$('identityMemberField').style.display=discord?'grid':'none';$('identityCommunityId').required=discord;if(!discord)$('identityMemberResults').innerHTML='';}
+    async function searchDiscordMembers(){
+      const query=$('identityMemberQuery').value.trim();const guildIds=[...$('identityCommunityId').selectedOptions].map(option=>option.value);
+      if(query.length<2||!guildIds.length){$('identityMemberResults').innerHTML='';return;}
+      $('identityMemberResults').innerHTML='<div class="empty">Buscando miembros…</div>';
+      try{
+        const responses=await Promise.all(guildIds.map(guildId=>request(`/api/pixelbot/community/discord-guilds/${encodeURIComponent(guildId)}/members?q=${encodeURIComponent(query)}`)));
+        const members=responses.flatMap(data=>data.members||[]);const grouped=new Map();
+        members.forEach(member=>{const existing=grouped.get(member.userId)||{...member,guilds:[]};existing.guilds.push({id:member.guildId,name:member.guildName});grouped.set(member.userId,existing);});
+        $('identityMemberResults').innerHTML=grouped.size?[...grouped.values()].map(member=>`<button class="secondary discord-member-choice" type="button" data-user="${escapeHtml(member.userId)}" data-name="${escapeHtml(member.displayName)}" data-guilds="${escapeHtml(member.guilds.map(guild=>guild.id).join(','))}"><strong>${escapeHtml(member.displayName)}</strong> · @${escapeHtml(member.username)}<br><small>${escapeHtml(member.userId)} · ${escapeHtml(member.guilds.map(guild=>guild.name).join(', '))}</small></button>`).join(''):'<div class="empty">No encontramos miembros con ese nombre.</div>';
+        document.querySelectorAll('.discord-member-choice').forEach(button=>button.addEventListener('click',()=>{$('identityUserId').value=button.dataset.user;$('identityDisplayName').value=button.dataset.name;const found=new Set(button.dataset.guilds.split(','));[...$('identityCommunityId').options].forEach(option=>option.selected=found.has(option.value));setStatus('identityStatus',`Miembro seleccionado: ${button.dataset.name}`,'ok');$('identityMemberResults').innerHTML='';}));
+      }catch(error){$('identityMemberResults').innerHTML=`<div class="status error">${escapeHtml(error.message)}</div>`;}
     }
     $('globalSearch').addEventListener('click',async()=>{ const query=$('globalQuery').value.trim(); $('globalResults').innerHTML='<div class="empty">Buscando…</div>'; try{const data=await request(`/api/pixelbot/community/profiles?q=${encodeURIComponent(query)}`); if(!data.profiles.length){$('globalResults').innerHTML='<div class="empty">No encontramos perfiles.</div>';return;} if(data.profiles.length===1){await openFullProfile(data.profiles[0].profileId);return;} $('globalResults').innerHTML=data.profiles.map(profile=>`<button class="secondary profile-choice" data-profile="${escapeHtml(profile.profileId)}"><span class="choice-name">${escapeHtml(profile.displayName||profile.identities[0]?.displayName)}</span><span class="choice-platforms">${profile.identities.map(item=>`<span class="platform-badge">${escapeHtml(platformIcons[item.platform]||'⚪')} ${escapeHtml(item.platform)}</span>`).join('')}</span></button>`).join(''); document.querySelectorAll('.profile-choice').forEach(button=>button.addEventListener('click',()=>openFullProfile(button.dataset.profile).catch(error=>$('globalResults').innerHTML=`<div class="empty">${escapeHtml(error.message)}</div>`)));}catch(error){$('globalResults').innerHTML=`<div class="empty">${escapeHtml(error.message)}</div>`;}});
     $('globalQuery').addEventListener('keydown',event=>{if(event.key==='Enter'){$('globalSearch').click();}});
@@ -217,9 +238,13 @@
     });
     $('identityForm').addEventListener('submit',async event=>{
       event.preventDefault(); if(!currentProfile)return; setStatus('identityStatus','Vinculando…');
-      const body={platform:$('identityPlatform').value,userId:$('identityUserId').value.trim(),displayName:$('identityDisplayName').value.trim(),communityId:$('identityCommunityId').value.trim()};
-      try{await request(`/api/pixelbot/community/profiles/${currentProfile.profileId}/identities`,{method:'POST',body:JSON.stringify(body)});$('identityEditor').close();await openFullProfile(currentProfile.profileId);}catch(error){setStatus('identityStatus',error.message,'error');}
+      const platform=$('identityPlatform').value;const communities=platform==='discord'?[...$('identityCommunityId').selectedOptions].map(option=>option.value):[''];
+      if(platform==='discord'&&!communities.length)return setStatus('identityStatus','Selecciona al menos un servidor de Discord.','error');
+      try{for(const communityId of communities){const body={platform,userId:$('identityUserId').value.trim(),displayName:$('identityDisplayName').value.trim(),communityId};await request(`/api/pixelbot/community/profiles/${currentProfile.profileId}/identities`,{method:'POST',body:JSON.stringify(body)});} $('identityEditor').close();await openFullProfile(currentProfile.profileId);}catch(error){setStatus('identityStatus',error.message,'error');}
     });
+    $('identityPlatform').addEventListener('change',updateIdentityGuildVisibility);
+    let memberSearchTimer;$('identityMemberQuery').addEventListener('input',()=>{clearTimeout(memberSearchTimer);memberSearchTimer=setTimeout(searchDiscordMembers,350);});
+    $('identityCommunityId').addEventListener('change',()=>{if($('identityMemberQuery').value.trim().length>=2)searchDiscordMembers();});
     $('platform').addEventListener('change',()=>{ const discord=$('platform').value==='discord'; $('communityField').style.opacity=discord?'1':'.72'; if(!discord)$('communityId').value=''; });
     $('clearForm').addEventListener('click',()=>{ $('birthdayForm').reset(); $('month').value='1'; setStatus('formStatus',''); });
     $('birthdayForm').addEventListener('submit',async event=>{

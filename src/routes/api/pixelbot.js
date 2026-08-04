@@ -1,9 +1,11 @@
 const express = require("express");
 const { requireIntegrationKey } = require("../../middleware/integrationAuth");
 const { getPlayerStats } = require("../../services/fortnite.service");
+const { searchDiscordGuildMembers } = require("../../discord/pixelbot");
 const { searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity } = require("../../services/community-profile.service");
 const {
   getFortniteAccount, getBirthday, saveBirthday, listBirthdays,
+  listGuildSettings,
   savePlatformBirthday, getPlatformBirthday, getBirthdayProfile, listPlatformBirthdaysByMonth,
 } = require("../../services/pixelbot.service");
 
@@ -20,6 +22,8 @@ function sendError(res, error) {
     invalid_birthday_profile: "El profileId no es válido.", birthday_profile_not_found: "No existe el perfil de cumpleaños indicado.",
     invalid_community_profile: "El perfil de comunidad no es válido.", invalid_profile_search: "Escribe al menos dos caracteres para buscar.",
     invalid_community_identity: "La identidad indicada no es válida.", community_profile_not_found: "No existe ese perfil de comunidad.",
+    invalid_discord_member_search: "Escribe al menos dos caracteres para buscar en Discord.",
+    pixelbot_not_connected: "PixelBot no está conectado. Actívalo en este servidor para consultar sus miembros.",
     account_not_linked: "El usuario no tiene una cuenta de Fortnite vinculada.",
   };
   const code = error.message || "internal_error";
@@ -43,6 +47,20 @@ router.get("/community/profiles", requireIntegrationKey, async (req, res) => {
   try {
     const profiles = await searchCommunityProfiles(req.query.q, req.query.limit);
     res.json({ ok: true, count: profiles.length, profiles });
+  } catch (error) { sendError(res, error); }
+});
+
+router.get("/community/discord-guilds", requireIntegrationKey, async (_req, res) => {
+  try {
+    const guilds = await listGuildSettings();
+    res.json({ ok: true, guilds });
+  } catch (error) { sendError(res, error); }
+});
+
+router.get("/community/discord-guilds/:guildId/members", requireIntegrationKey, async (req, res) => {
+  try {
+    const members = await searchDiscordGuildMembers(req.params.guildId, req.query.q, req.query.limit);
+    res.json({ ok: true, count: members.length, members });
   } catch (error) { sendError(res, error); }
 });
 
