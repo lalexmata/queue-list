@@ -25,7 +25,8 @@ function errorMessage(error) {
 async function allowed(interaction) {
   const settings = await getGuildSettings(interaction.guildId);
   if (settings?.allowedChannelId && settings.allowedChannelId !== interaction.channelId) {
-    await interaction.reply({ content: `PixelBot está habilitado en <#${settings.allowedChannelId}>.`, ephemeral: true });
+    const payload = { content: `PixelBot está habilitado en <#${settings.allowedChannelId}>.`, ephemeral: true };
+    if (interaction.deferred || interaction.replied) await interaction.editReply({ content: payload.content }); else await interaction.reply(payload);
     return false;
   }
   return true;
@@ -34,12 +35,10 @@ async function allowed(interaction) {
 async function handleFortnite(interaction) {
   const sub = interaction.options.getSubcommand();
   if (sub === "vincular") {
-    await interaction.deferReply({ ephemeral: true });
     const stats = await getPlayerStats(interaction.options.getString("jugador", true));
     await linkFortniteAccount({ guildId: interaction.guildId, discordUserId: interaction.user.id, epicName: stats.name, epicAccountId: stats.accountId });
     return interaction.editReply(`Cuenta vinculada correctamente con **${stats.name}**.`);
   }
-  await interaction.deferReply();
   const suppliedName = interaction.options.getString("jugador");
   const linked = suppliedName ? null : await getFortniteAccount(interaction.guildId, interaction.user.id);
   if (!suppliedName && !linked) throw Object.assign(new Error("account_not_linked"), { status: 404 });
@@ -72,11 +71,11 @@ async function handleBirthday(interaction) {
     const birthday = await saveBirthday({ guildId: interaction.guildId, discordUserId: interaction.user.id,
       displayName: interaction.member?.displayName || interaction.user.globalName || interaction.user.username,
       day: interaction.options.getInteger("dia", true), month: interaction.options.getInteger("mes", true), year: interaction.options.getInteger("ano") });
-    return interaction.reply({ content: `Guardé tu cumpleaños: **${birthday.day}/${birthday.month}**.`, ephemeral: true });
+    return interaction.editReply({ content: `Guardé tu cumpleaños: **${birthday.day}/${birthday.month}**.` });
   }
   if (sub === "lista") {
     const birthdays = await listBirthdays(interaction.guildId);
-    if (!birthdays.length) return interaction.reply("Todavía no hay cumpleaños registrados en este servidor.");
+    if (!birthdays.length) return interaction.editReply("Todavía no hay cumpleaños registrados en este servidor.");
     const visible = birthdays.slice(0, 50);
     const lines = visible.map(item => {
       const identity = item.discordUserId
@@ -87,10 +86,10 @@ async function handleBirthday(interaction) {
     if (birthdays.length > visible.length) lines.push(`\n…y ${birthdays.length - visible.length} cumpleaños más.`);
     const embed = new EmbedBuilder().setColor(0xf472b6).setTitle("🎉 Cumpleaños del servidor")
       .setDescription(lines.join("\n")).setFooter({ text: `${birthdays.length} cumpleaños registrado(s)` });
-    return interaction.reply({ embeds: [embed] });
+    return interaction.editReply({ embeds: [embed] });
   }
   const birthday = await getBirthday(interaction.guildId, interaction.user.id);
-  return interaction.reply({ content: birthday ? `Tu cumpleaños registrado es **${birthday.day}/${birthday.month}**.` : "No tienes un cumpleaños registrado.", ephemeral: true });
+  return interaction.editReply({ content: birthday ? `Tu cumpleaños registrado es **${birthday.day}/${birthday.month}**.` : "No tienes un cumpleaños registrado." });
 }
 
 async function syncDiscordIdentityNames() {
@@ -338,6 +337,12 @@ async function startPixelBot() {
   client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand() || !interaction.guildId) return;
     try {
+      if (interaction.commandName === "fortnite") {
+        await interaction.deferReply({ ephemeral: interaction.options.getSubcommand() === "vincular" });
+      }
+      if (interaction.commandName === "cumpleanos") {
+        await interaction.deferReply({ ephemeral: interaction.options.getSubcommand() !== "lista" });
+      }
       await ensureGuild({ guildId: interaction.guildId, guildName: interaction.guild?.name });
       await updateDiscordIdentityName({
         guildId: interaction.guildId, discordUserId: interaction.user.id,
@@ -357,7 +362,7 @@ async function startPixelBot() {
       console.error("PixelBot command error:", error);
       const payload = { content: errorMessage(error), ephemeral: true };
       try {
-        if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.reply(payload);
+        if (interaction.deferred || interaction.replied) await interaction.editReply({ content: payload.content }); else await interaction.reply(payload);
       } catch (replyError) {
         if (replyError.code !== 40060) console.error("PixelBot error response failed:", replyError);
       }
