@@ -1,7 +1,7 @@
 const express = require("express");
 const { requireIntegrationKey } = require("../../middleware/integrationAuth");
 const { getPlayerStats } = require("../../services/fortnite.service");
-const { searchDiscordGuildMembers } = require("../../discord/pixelbot");
+const { searchDiscordGuildMembers, getDiscordGuildMember } = require("../../discord/pixelbot");
 const { searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity } = require("../../services/community-profile.service");
 const {
   getFortniteAccount, getBirthday, saveBirthday, listBirthdays,
@@ -62,6 +62,16 @@ router.get("/community/discord-guilds/:guildId/members", requireIntegrationKey, 
     const members = await searchDiscordGuildMembers(req.params.guildId, req.query.q, req.query.limit);
     res.json({ ok: true, count: members.length, members });
   } catch (error) { sendError(res, error); }
+});
+
+router.get("/community/discord-guilds/:guildId/members/:userId", requireIntegrationKey, async (req, res) => {
+  try {
+    const member = await getDiscordGuildMember(req.params.guildId, req.params.userId);
+    res.json({ ok: true, member });
+  } catch (error) {
+    if (error.code === 10007 || error.code === 10013) error.status = 404;
+    sendError(res, error);
+  }
 });
 
 router.get("/community/profiles/:profileId", requireIntegrationKey, async (req, res) => {
