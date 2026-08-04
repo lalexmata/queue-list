@@ -2,7 +2,7 @@ const express = require("express");
 const { requireIntegrationKey } = require("../../middleware/integrationAuth");
 const { getPlayerStats } = require("../../services/fortnite.service");
 const { searchDiscordGuildMembers, getDiscordGuildMember } = require("../../discord/pixelbot");
-const { searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity } = require("../../services/community-profile.service");
+const { searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity } = require("../../services/community-profile.service");
 const {
   getFortniteAccount, getBirthday, saveBirthday, listBirthdays,
   listGuildSettings,
@@ -22,6 +22,7 @@ function sendError(res, error) {
     invalid_birthday_profile: "El profileId no es válido.", birthday_profile_not_found: "No existe el perfil de cumpleaños indicado.",
     invalid_community_profile: "El perfil de comunidad no es válido.", invalid_profile_search: "Escribe al menos dos caracteres para buscar.",
     invalid_community_identity: "La identidad indicada no es válida.", community_profile_not_found: "No existe ese perfil de comunidad.",
+    community_identity_not_found: "La cuenta vinculada ya no existe en este perfil.",
     invalid_discord_member_search: "Escribe al menos dos caracteres para buscar en Discord.",
     pixelbot_not_connected: "PixelBot no está conectado. Actívalo en este servidor para consultar sus miembros.",
     account_not_linked: "El usuario no tiene una cuenta de Fortnite vinculada.",
@@ -43,28 +44,28 @@ router.get("/fortnite/stats", requireIntegrationKey, async (req, res) => {
   } catch (error) { sendError(res, error); }
 });
 
-router.get("/community/profiles", requireIntegrationKey, async (req, res) => {
+router.get("/community/profiles", async (req, res) => {
   try {
     const profiles = await searchCommunityProfiles(req.query.q, req.query.limit);
     res.json({ ok: true, count: profiles.length, profiles });
   } catch (error) { sendError(res, error); }
 });
 
-router.get("/community/discord-guilds", requireIntegrationKey, async (_req, res) => {
+router.get("/community/discord-guilds", async (_req, res) => {
   try {
     const guilds = await listGuildSettings();
     res.json({ ok: true, guilds });
   } catch (error) { sendError(res, error); }
 });
 
-router.get("/community/discord-guilds/:guildId/members", requireIntegrationKey, async (req, res) => {
+router.get("/community/discord-guilds/:guildId/members", async (req, res) => {
   try {
     const members = await searchDiscordGuildMembers(req.params.guildId, req.query.q, req.query.limit);
     res.json({ ok: true, count: members.length, members });
   } catch (error) { sendError(res, error); }
 });
 
-router.get("/community/discord-guilds/:guildId/members/:userId", requireIntegrationKey, async (req, res) => {
+router.get("/community/discord-guilds/:guildId/members/:userId", async (req, res) => {
   try {
     const member = await getDiscordGuildMember(req.params.guildId, req.params.userId);
     res.json({ ok: true, member });
@@ -74,23 +75,32 @@ router.get("/community/discord-guilds/:guildId/members/:userId", requireIntegrat
   }
 });
 
-router.get("/community/profiles/:profileId", requireIntegrationKey, async (req, res) => {
+router.get("/community/profiles/:profileId", async (req, res) => {
   try {
     const profile = await getCommunityProfile(req.params.profileId);
     res.status(profile ? 200 : 404).json({ ok: Boolean(profile), profile });
   } catch (error) { sendError(res, error); }
 });
 
-router.patch("/community/profiles/:profileId", requireIntegrationKey, async (req, res) => {
+router.patch("/community/profiles/:profileId", async (req, res) => {
   try {
     const profile = await updateCommunityProfile(req.params.profileId, req.body);
     res.status(profile ? 200 : 404).json({ ok: Boolean(profile), profile });
   } catch (error) { sendError(res, error); }
 });
 
-router.post("/community/profiles/:profileId/identities", requireIntegrationKey, async (req, res) => {
+router.post("/community/profiles/:profileId/identities", async (req, res) => {
   try {
     const profile = await addCommunityIdentity(req.params.profileId, req.body);
+    res.json({ ok: true, profile });
+  } catch (error) { sendError(res, error); }
+});
+
+router.patch("/community/profiles/:profileId/identities/:platform/:userId", async (req, res) => {
+  try {
+    const profile = await updateCommunityIdentity(req.params.profileId, {
+      platform: req.params.platform, userId: req.params.userId, communityId: req.query.communityId || "",
+    }, req.body);
     res.json({ ok: true, profile });
   } catch (error) { sendError(res, error); }
 });
@@ -126,7 +136,7 @@ function platformBirthdayMessage(birthdays, month, upcoming) {
   return message;
 }
 
-router.put("/birthdays/platforms/:platform/users/:userId", requireIntegrationKey, async (req, res) => {
+router.put("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
   try {
     const birthday = await savePlatformBirthday({
       ...req.body, platform: req.params.platform, userId: req.params.userId,
@@ -136,7 +146,7 @@ router.put("/birthdays/platforms/:platform/users/:userId", requireIntegrationKey
   } catch (error) { sendError(res, error); }
 });
 
-router.get("/birthdays/platforms/:platform/users/:userId", requireIntegrationKey, async (req, res) => {
+router.get("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
   try {
     const birthday = await getPlatformBirthday({
       platform: req.params.platform, userId: req.params.userId, communityId: req.query.communityId || "",
@@ -147,7 +157,7 @@ router.get("/birthdays/platforms/:platform/users/:userId", requireIntegrationKey
   } catch (error) { sendError(res, error); }
 });
 
-router.get("/birthdays/platforms/:platform", requireIntegrationKey, async (req, res) => {
+router.get("/birthdays/platforms/:platform", async (req, res) => {
   try {
     const timeZone = String(req.query.timezone || "America/Santiago");
     const today = localDateParts(timeZone);
@@ -164,7 +174,7 @@ router.get("/birthdays/platforms/:platform", requireIntegrationKey, async (req, 
   } catch (error) { sendError(res, error); }
 });
 
-router.get("/birthdays/profiles/:profileId", requireIntegrationKey, async (req, res) => {
+router.get("/birthdays/profiles/:profileId", async (req, res) => {
   try {
     const profile = await getBirthdayProfile(req.params.profileId);
     res.status(profile ? 200 : 404).json({ ok: Boolean(profile), profile,

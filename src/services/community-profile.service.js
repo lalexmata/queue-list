@@ -219,4 +219,73 @@ async function addCommunityIdentity(rawProfileId, data = {}) {
   } finally { client.release(); }
 }
 
-module.exports = { findOrCreateCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity };
+async function updateCommunityIdentity(rawProfileId, original = {}, changes = {}) {
+  const targetId = profileId(rawProfileId);
+  const oldPlatform = String(original.platform || "").trim().toLowerCase();
+  const oldUserId = String(original.userId || "").trim().replace(/^@+/, "").toLowerCase();
+  const oldCommunityId = String(original.communityId || "").trim();
+  const platform = String(changes.platform || "").trim().toLowerCase();
+  const userId = String(changes.userId || "").trim().replace(/^@+/, "").toLowerCase();
+  const displayName = String(changes.displayName || changes.userId || "").trim().replace(/^@+/, "").slice(0, 100);
+  const communityId = String(changes.communityId || "").trim();
+  if (!IDENTITY_PLATFORMS.has(oldPlatform) || !oldUserId || !IDENTITY_PLATFORMS.has(platform)
+    || platform === "unknown" || !userId || userId.length > 100 || !displayName) {
+    throw Object.assign(new Error("invalid_community_identity"), { status: 400 });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const current = await client.query(
+      `SELECT 1 FROM community_identities WHERE profile_id = $1 AND platform = $2
+       AND community_id = $3 AND platform_user_id = $4 FOR UPDATE`,
+      [targetId, oldPlatform, oldCommunityId, oldUserId]
+    );
+    if (!current.rows.length) throw Object.assign(new Error("community_identity_not_found"), { status: 404 });
+    const conflict = await client.query(
+      `SELECT profile_id AS "profileId" FROM community_identities
+       WHERE platform = $1 AND community_id = $2 AND platform_user_id = $3 FOR UPDATE`,
+      [platform, communityId, userId]
+    );
+    const sourceId = conflict.rows[0]?.profileId;
+    if (sourceId && String(sourceId) !== String(targetId)) {
+      await client.query(
+        `UPDATE community_profiles target SET
+           birth_day = COALESCE(target.birth_day, source.birth_day),
+           birth_month = COALESCE(target.birth_month, source.birth_month),
+           birth_year = COALESCE(target.birth_year, source.birth_year), updated_at = NOW()
+         FROM community_profiles source WHERE target.id = $1 AND source.id = $2`,
+        [targetId, sourceId]
+      );
+      await client.query(
+        `DELETE FROM community_identities source USING community_identities target
+         WHERE source.profile_id = $2 AND target.profile_id = $1
+           AND source.platform = target.platform AND source.community_id = target.community_id
+           AND source.platform_user_id = target.platform_user_id`,
+        [targetId, sourceId]
+      );
+      for (const table of ["community_identities", "giveaway_participants", "song_requests", "queue_items"]) {
+        await client.query(`UPDATE ${table} SET profile_id = $1 WHERE profile_id = $2`, [targetId, sourceId]);
+      }
+      await client.query("DELETE FROM community_profiles WHERE id = $1", [sourceId]);
+    }
+    await client.query(
+      `DELETE FROM community_identities WHERE profile_id = $1 AND platform = $2
+       AND community_id = $3 AND platform_user_id = $4`,
+      [targetId, oldPlatform, oldCommunityId, oldUserId]
+    );
+    await client.query(
+      `INSERT INTO community_identities (profile_id, platform, community_id, platform_user_id, display_name)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (platform, community_id, platform_user_id) DO UPDATE
+         SET profile_id = EXCLUDED.profile_id, display_name = EXCLUDED.display_name, updated_at = NOW()`,
+      [targetId, platform, communityId, userId, displayName]
+    );
+    await client.query("COMMIT");
+    return getCommunityProfile(targetId);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally { client.release(); }
+}
+
+module.exports = { findOrCreateCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity };
