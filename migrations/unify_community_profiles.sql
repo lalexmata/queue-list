@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS community_profiles (
 
 CREATE TABLE IF NOT EXISTS community_identities (
   profile_id BIGINT NOT NULL REFERENCES community_profiles(id) ON DELETE CASCADE,
-  platform TEXT NOT NULL CHECK (platform IN ('discord', 'twitch', 'youtube', 'kick', 'tiktok', 'facebook', 'instagram', 'other')),
+  platform TEXT NOT NULL CHECK (platform IN ('discord', 'twitch', 'youtube', 'kick', 'epic', 'tiktok', 'facebook', 'instagram', 'other')),
   community_id TEXT NOT NULL DEFAULT '',
   platform_user_id TEXT NOT NULL,
   display_name TEXT NOT NULL,

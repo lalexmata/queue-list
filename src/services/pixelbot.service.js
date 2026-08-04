@@ -1,4 +1,5 @@
 const { pool } = require("../database/db");
+const { findOrCreateCommunityProfile } = require("./community-profile.service");
 
 async function ensureGuild({ guildId, guildName = null }) {
   const { rows } = await pool.query(
@@ -54,6 +55,16 @@ async function linkFortniteAccount({ guildId, discordUserId, epicName, epicAccou
      RETURNING epic_name AS "epicName", epic_account_id AS "epicAccountId"`,
     [String(guildId), String(discordUserId), String(epicName).trim(), epicAccountId]
   );
+  const profileId = await findOrCreateCommunityProfile(pool, {
+    platform: "discord", userId: discordUserId, displayName: discordUserId, communityId: guildId,
+  });
+  await pool.query(
+    `INSERT INTO community_identities (profile_id, platform, community_id, platform_user_id, display_name)
+     VALUES ($1, 'epic', '', $2, $3)
+     ON CONFLICT (platform, community_id, platform_user_id) DO UPDATE
+       SET profile_id = EXCLUDED.profile_id, display_name = EXCLUDED.display_name, updated_at = NOW()`,
+    [profileId, String(epicName).trim().toLowerCase(), String(epicName).trim()]
+  );
   return rows[0];
 }
 
@@ -107,11 +118,24 @@ async function getBirthday(guildId, discordUserId) {
 
 async function listBirthdays(guildId) {
   const { rows } = await pool.query(
-    `SELECT i.platform_user_id AS "discordUserId", p.birth_day AS day, p.birth_month AS month
-     FROM community_identities i
-     JOIN community_profiles p ON p.id = i.profile_id
-     WHERE i.platform = 'discord' AND i.community_id = $1
-     ORDER BY p.birth_month, p.birth_day, i.platform_user_id`,
+    `SELECT p.id AS "profileId", p.display_name AS "displayName",
+            p.birth_day AS day, p.birth_month AS month,
+            (SELECT d.platform_user_id FROM community_identities d
+             WHERE d.profile_id = p.id AND d.platform = 'discord' AND d.community_id = $1
+             ORDER BY d.created_at LIMIT 1) AS "discordUserId",
+            (SELECT i.platform FROM community_identities i WHERE i.profile_id = p.id
+             ORDER BY CASE i.platform WHEN 'twitch' THEN 0 WHEN 'youtube' THEN 1 WHEN 'kick' THEN 2 ELSE 3 END,
+                      i.created_at LIMIT 1) AS platform,
+            (SELECT COALESCE(i.display_name, i.platform_user_id) FROM community_identities i WHERE i.profile_id = p.id
+             ORDER BY CASE i.platform WHEN 'twitch' THEN 0 WHEN 'youtube' THEN 1 WHEN 'kick' THEN 2 ELSE 3 END,
+                      i.created_at LIMIT 1) AS "identityName"
+     FROM community_profiles p
+     WHERE p.birth_month IS NOT NULL AND p.birth_day IS NOT NULL
+       AND (EXISTS (SELECT 1 FROM community_identities d
+                    WHERE d.profile_id = p.id AND d.platform = 'discord' AND d.community_id = $1)
+            OR NOT EXISTS (SELECT 1 FROM community_identities d
+                           WHERE d.profile_id = p.id AND d.platform = 'discord'))
+     ORDER BY p.birth_month, p.birth_day, LOWER(COALESCE(p.display_name, ''))`,
     [String(guildId)]
   );
   return rows;

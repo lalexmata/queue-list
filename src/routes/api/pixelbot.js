@@ -2,7 +2,7 @@ const express = require("express");
 const { requireIntegrationKey } = require("../../middleware/integrationAuth");
 const { getPlayerStats } = require("../../services/fortnite.service");
 const { searchDiscordGuildMembers, getDiscordGuildMember } = require("../../discord/pixelbot");
-const { searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity } = require("../../services/community-profile.service");
+const { createCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity } = require("../../services/community-profile.service");
 const {
   getFortniteAccount, getBirthday, saveBirthday, listBirthdays,
   listGuildSettings,
@@ -48,6 +48,13 @@ router.get("/community/profiles", async (req, res) => {
   try {
     const profiles = await searchCommunityProfiles(req.query.q, req.query.limit);
     res.json({ ok: true, count: profiles.length, profiles });
+  } catch (error) { sendError(res, error); }
+});
+
+router.post("/community/profiles", async (req, res) => {
+  try {
+    const profile = await createCommunityProfile(req.body);
+    res.status(201).json({ ok: true, profile });
   } catch (error) { sendError(res, error); }
 });
 

@@ -78,7 +78,12 @@ async function handleBirthday(interaction) {
     const birthdays = await listBirthdays(interaction.guildId);
     if (!birthdays.length) return interaction.reply("Todavía no hay cumpleaños registrados en este servidor.");
     const visible = birthdays.slice(0, 50);
-    const lines = visible.map(item => `🎂 ${String(item.day).padStart(2, "0")}/${String(item.month).padStart(2, "0")} — <@${item.discordUserId}>`);
+    const lines = visible.map(item => {
+      const identity = item.discordUserId
+        ? `<@${item.discordUserId}>`
+        : `**${item.displayName || item.identityName || "Usuario"}**${item.platform ? ` · ${item.platform}` : ""}`;
+      return `🎂 ${String(item.day).padStart(2, "0")}/${String(item.month).padStart(2, "0")} — ${identity}`;
+    });
     if (birthdays.length > visible.length) lines.push(`\n…y ${birthdays.length - visible.length} cumpleaños más.`);
     const embed = new EmbedBuilder().setColor(0xf472b6).setTitle("🎉 Cumpleaños del servidor")
       .setDescription(lines.join("\n")).setFooter({ text: `${birthdays.length} cumpleaños registrado(s)` });

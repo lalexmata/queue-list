@@ -6,7 +6,7 @@ function profileId(value) {
   return id;
 }
 
-const IDENTITY_PLATFORMS = new Set(["discord", "twitch", "youtube", "kick", "tiktok", "facebook", "instagram", "other", "unknown"]);
+const IDENTITY_PLATFORMS = new Set(["discord", "twitch", "youtube", "kick", "epic", "tiktok", "facebook", "instagram", "other", "unknown"]);
 
 async function findOrCreateCommunityProfile(db, { platform: rawPlatform, userId: rawUserId, displayName, communityId = "" }) {
   const platform = String(rawPlatform || "other").trim().toLowerCase();
@@ -71,6 +71,33 @@ async function searchCommunityProfiles(rawQuery, limit = 30) {
     [`%${query}%`, query, safeLimit]
   );
   return rows;
+}
+
+async function createCommunityProfile(data = {}) {
+  const displayName = String(data.displayName || "").trim().slice(0, 100);
+  if (!displayName) throw Object.assign(new Error("invalid_community_profile"), { status: 400 });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const platform = String(data.platform || "").trim().toLowerCase();
+    const userId = String(data.userId || "").trim().replace(/^@+/, "").toLowerCase();
+    const previous = await client.query(
+      `SELECT profile_id AS "profileId" FROM community_identities
+       WHERE platform = $1 AND LOWER(platform_user_id) = $2 LIMIT 1`,
+      [platform, userId]
+    );
+    const selectedId = await findOrCreateCommunityProfile(client, {
+      platform, userId, displayName: data.identityDisplayName || data.userId, communityId: data.communityId || "",
+    });
+    if (!previous.rows.length) {
+      await client.query("UPDATE community_profiles SET display_name = $2, updated_at = NOW() WHERE id = $1", [selectedId, displayName]);
+    }
+    await client.query("COMMIT");
+    return getCommunityProfile(selectedId);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally { client.release(); }
 }
 
 async function getCommunityProfile(rawId) {
@@ -288,4 +315,4 @@ async function updateCommunityIdentity(rawProfileId, original = {}, changes = {}
   } finally { client.release(); }
 }
 
-module.exports = { findOrCreateCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity };
+module.exports = { findOrCreateCommunityProfile, createCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity };
