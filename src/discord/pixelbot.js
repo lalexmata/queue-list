@@ -14,6 +14,41 @@ const {
 let client;
 const mentionCooldowns = new Map();
 
+function pixelBotEnabled() {
+  return !["0", "false", "no", "off"].includes(String(process.env.PIXELBOT_ENABLED ?? "true").trim().toLowerCase());
+}
+
+function getPixelBotStatus() {
+  return {
+    enabled: pixelBotEnabled(),
+    tokenConfigured: Boolean(process.env.DISCORD_BOT_TOKEN),
+    started: Boolean(client),
+    ready: Boolean(client?.isReady()),
+    username: client?.user?.tag || null,
+    guildCount: client?.guilds?.cache?.size || 0,
+  };
+}
+
+function commandContext(interaction, error) {
+  let subcommand = null;
+  try { subcommand = interaction.options?.getSubcommand(false) || null; } catch { /* no subcommand */ }
+  return {
+    event: "pixelbot_command_error",
+    interactionId: interaction.id,
+    command: interaction.commandName,
+    subcommand,
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+    deferred: interaction.deferred,
+    replied: interaction.replied,
+    errorName: error?.name,
+    errorMessage: error?.message,
+    errorCode: error?.code,
+    status: error?.status,
+    stack: error?.stack,
+  };
+}
+
 function errorMessage(error) {
   return ({ player_not_found: "No encontré ese jugador de Epic.", player_stats_private: "Las estadísticas de ese jugador son privadas.",
     account_not_linked: "Primero usa `/fortnite vincular`.", fortnite_not_configured: "Falta configurar FORTNITE_API_KEY.",
@@ -310,7 +345,7 @@ async function handleMention(message) {
 
 async function startPixelBot() {
   if (client) return client;
-  const enabled = !["0", "false", "no", "off"].includes(String(process.env.PIXELBOT_ENABLED ?? "true").trim().toLowerCase());
+  const enabled = pixelBotEnabled();
   if (!enabled) {
     console.log("ℹ️ PixelBot disabled by PIXELBOT_ENABLED");
     return null;
@@ -318,6 +353,13 @@ async function startPixelBot() {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) { console.log("ℹ️ PixelBot disabled: DISCORD_BOT_TOKEN is not configured"); return null; }
   client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers] });
+  client.on(Events.Error, error => console.error(JSON.stringify({
+    event: "pixelbot_client_error", errorMessage: error?.message, errorCode: error?.code, stack: error?.stack,
+  })));
+  client.on(Events.ShardError, error => console.error(JSON.stringify({
+    event: "pixelbot_shard_error", errorMessage: error?.message, errorCode: error?.code, stack: error?.stack,
+  })));
+  client.on(Events.Invalidated, () => console.error(JSON.stringify({ event: "pixelbot_session_invalidated" })));
   client.once(Events.ClientReady, async ready => {
     console.log(`✅ PixelBot connected as ${ready.user.tag}`);
     await syncDiscordIdentityNames();
@@ -356,15 +398,16 @@ async function startPixelBot() {
       if (interaction.commandName === "pixelbot") await handleConfig(interaction);
     } catch (error) {
       if (error.code === 40060) {
-        console.warn(`PixelBot ignored duplicate acknowledgement for interaction ${interaction.id}. Check for another bot instance using the same token.`);
+        console.error(JSON.stringify({ ...commandContext(interaction, error), diagnosis: "duplicate_acknowledgement_check_multiple_bot_instances" }));
         return;
       }
-      console.error("PixelBot command error:", error);
-      const payload = { content: errorMessage(error), ephemeral: true };
+      console.error(JSON.stringify(commandContext(interaction, error)));
+      const reference = String(interaction.id || "unknown").slice(-8);
+      const payload = { content: `${errorMessage(error)} Referencia: \`${reference}\`.`, ephemeral: true };
       try {
         if (interaction.deferred || interaction.replied) await interaction.editReply({ content: payload.content }); else await interaction.reply(payload);
       } catch (replyError) {
-        if (replyError.code !== 40060) console.error("PixelBot error response failed:", replyError);
+        console.error(JSON.stringify({ ...commandContext(interaction, replyError), event: "pixelbot_error_response_failed", originalError: error?.message }));
       }
     }
   });
@@ -372,4 +415,4 @@ async function startPixelBot() {
   return client;
 }
 
-module.exports = { startPixelBot, searchDiscordGuildMembers, getDiscordGuildMember };
+module.exports = { startPixelBot, getPixelBotStatus, searchDiscordGuildMembers, getDiscordGuildMember };

@@ -1,7 +1,7 @@
 const express = require("express");
 const { requireIntegrationKey } = require("../../middleware/integrationAuth");
 const { getPlayerStats } = require("../../services/fortnite.service");
-const { searchDiscordGuildMembers, getDiscordGuildMember } = require("../../discord/pixelbot");
+const { getPixelBotStatus, searchDiscordGuildMembers, getDiscordGuildMember } = require("../../discord/pixelbot");
 const { createCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity, mergeCommunityProfiles } = require("../../services/community-profile.service");
 const {
   getFortniteAccount, getBirthday, saveBirthday, listBirthdays,
@@ -10,6 +10,8 @@ const {
 } = require("../../services/pixelbot.service");
 
 const router = express.Router();
+
+router.get("/status", (_req, res) => res.json({ ok: true, pixelbot: getPixelBotStatus() }));
 
 function sendError(res, error) {
   const messages = {
