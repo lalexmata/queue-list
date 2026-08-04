@@ -2,7 +2,7 @@ const express = require("express");
 const { requireIntegrationKey } = require("../../middleware/integrationAuth");
 const { getPlayerStats } = require("../../services/fortnite.service");
 const { searchDiscordGuildMembers, getDiscordGuildMember } = require("../../discord/pixelbot");
-const { createCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity } = require("../../services/community-profile.service");
+const { createCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity, mergeCommunityProfiles } = require("../../services/community-profile.service");
 const {
   getFortniteAccount, getBirthday, saveBirthday, listBirthdays,
   listGuildSettings,
@@ -23,6 +23,7 @@ function sendError(res, error) {
     invalid_community_profile: "El perfil de comunidad no es válido.", invalid_profile_search: "Escribe al menos dos caracteres para buscar.",
     invalid_community_identity: "La identidad indicada no es válida.", community_profile_not_found: "No existe ese perfil de comunidad.",
     community_identity_not_found: "La cuenta vinculada ya no existe en este perfil.",
+    same_community_profile: "Selecciona otro perfil para realizar la unificación.",
     invalid_discord_member_search: "Escribe al menos dos caracteres para buscar en Discord.",
     pixelbot_not_connected: "PixelBot no está conectado. Actívalo en este servidor para consultar sus miembros.",
     account_not_linked: "El usuario no tiene una cuenta de Fortnite vinculada.",
@@ -93,6 +94,13 @@ router.patch("/community/profiles/:profileId", async (req, res) => {
   try {
     const profile = await updateCommunityProfile(req.params.profileId, req.body);
     res.status(profile ? 200 : 404).json({ ok: Boolean(profile), profile });
+  } catch (error) { sendError(res, error); }
+});
+
+router.post("/community/profiles/:profileId/merge", async (req, res) => {
+  try {
+    const profile = await mergeCommunityProfiles(req.params.profileId, req.body.sourceProfileId);
+    res.json({ ok: true, profile });
   } catch (error) { sendError(res, error); }
 });
 

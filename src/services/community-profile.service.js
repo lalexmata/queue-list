@@ -315,4 +315,45 @@ async function updateCommunityIdentity(rawProfileId, original = {}, changes = {}
   } finally { client.release(); }
 }
 
-module.exports = { findOrCreateCommunityProfile, createCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity };
+async function mergeCommunityProfiles(rawTargetId, rawSourceId) {
+  const targetId = profileId(rawTargetId);
+  const sourceId = profileId(rawSourceId);
+  if (targetId === sourceId) throw Object.assign(new Error("same_community_profile"), { status: 400 });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query(
+      "SELECT id FROM community_profiles WHERE id = ANY($1::bigint[]) ORDER BY id FOR UPDATE",
+      [[targetId, sourceId]]
+    );
+    if (locked.rows.length !== 2) throw Object.assign(new Error("community_profile_not_found"), { status: 404 });
+    await client.query(
+      `UPDATE community_profiles target SET
+         display_name = COALESCE(target.display_name, source.display_name),
+         notes = COALESCE(target.notes, source.notes),
+         birth_day = COALESCE(target.birth_day, source.birth_day),
+         birth_month = COALESCE(target.birth_month, source.birth_month),
+         birth_year = COALESCE(target.birth_year, source.birth_year), updated_at = NOW()
+       FROM community_profiles source WHERE target.id = $1 AND source.id = $2`,
+      [targetId, sourceId]
+    );
+    await client.query(
+      `DELETE FROM community_identities source USING community_identities target
+       WHERE source.profile_id = $2 AND target.profile_id = $1
+         AND source.platform = target.platform AND source.community_id = target.community_id
+         AND source.platform_user_id = target.platform_user_id`,
+      [targetId, sourceId]
+    );
+    for (const table of ["community_identities", "giveaway_participants", "song_requests", "queue_items"]) {
+      await client.query(`UPDATE ${table} SET profile_id = $1 WHERE profile_id = $2`, [targetId, sourceId]);
+    }
+    await client.query("DELETE FROM community_profiles WHERE id = $1", [sourceId]);
+    await client.query("COMMIT");
+    return getCommunityProfile(targetId);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally { client.release(); }
+}
+
+module.exports = { findOrCreateCommunityProfile, createCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity, mergeCommunityProfiles };
