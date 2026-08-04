@@ -26,7 +26,8 @@ async function getGuildSettings(guildId) {
 async function listGuildSettings() {
   const { rows } = await pool.query(
     `SELECT guild_id AS "guildId", COALESCE(guild_name, guild_id) AS "guildName",
-            giveaway_active AS "giveawayActive", allowed_channel_id AS "allowedChannelId"
+            giveaway_active AS "giveawayActive", allowed_channel_id AS "allowedChannelId",
+            welcome_channel_id AS "welcomeChannelId", birthday_channel_id AS "birthdayChannelId"
      FROM discord_guild_settings
      ORDER BY LOWER(COALESCE(guild_name, guild_id))`
   );

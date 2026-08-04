@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const { requireSocialAuth } = require("../../middleware/auth");
 
 const router = express.Router();
 const PAGES = path.join(__dirname, "../../pages");
@@ -11,6 +12,7 @@ router.get("/admin/sorteos", (req, res) => res.sendFile(path.join(PAGES, "admin-
 router.get("/admin/sorteos/configuracion", (req, res) => res.sendFile(path.join(PAGES, "admin-giveaways.html")));
 router.get("/admin/cumpleanos", (req, res) => res.sendFile(path.join(PAGES, "admin-birthdays.html")));
 router.get("/admin/comunidad", (req, res) => res.sendFile(path.join(PAGES, "admin-birthdays.html")));
+router.get("/admin/pixelbot", requireSocialAuth, (req, res) => res.sendFile(path.join(PAGES, "admin-pixelbot.html")));
 router.get("/cola", (req, res) => res.sendFile(path.join(PAGES, "cola.html")));
 router.get("/widgets/social", (req, res) => res.sendFile(path.join(PAGES, "widgets/socialrotator.html")));
 router.get("/widgets/codigo", (req, res) => res.sendFile(path.join(PAGES, "widgets/codigo.html")));

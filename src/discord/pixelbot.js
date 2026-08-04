@@ -3,6 +3,7 @@ const { getPlayerStats } = require("../services/fortnite.service");
 const { renderFortniteStatsCard } = require("../services/fortnite-card.service");
 const { findParticipantByUsername, getActiveGiveawayId } = require("../services/giveawayCoupons.service");
 const { getLatestGiveawayWithWinners } = require("../services/giveawayRounds.service");
+const { cleanMessage, claimDueMessages, finishScheduledMessage } = require("../services/pixelbot-messages.service");
 const {
   ensureGuild, getGuildSettings, updateGuildSettings, linkFortniteAccount, getFortniteAccount,
   saveBirthday, getBirthday, listBirthdays, listBirthdayGuilds,
@@ -177,6 +178,55 @@ async function getDiscordGuildMember(guildId, userId) {
     guildId: guild.id,
     guildName: guild.name,
   };
+}
+
+async function listPixelBotChannels(guildId) {
+  if (!client?.isReady()) throw Object.assign(new Error("pixelbot_not_connected"), { status: 503 });
+  const guild = client.guilds.cache.get(String(guildId)) || await client.guilds.fetch(String(guildId));
+  const channels = await guild.channels.fetch();
+  return [...channels.values()].filter(channel => {
+    if (!channel?.isTextBased() || channel.isThread()) return false;
+    const permissions = channel.permissionsFor(client.user);
+    return permissions?.has(PermissionFlagsBits.ViewChannel) && permissions?.has(PermissionFlagsBits.SendMessages);
+  }).map(channel => ({ channelId: channel.id, channelName: channel.name, position: channel.rawPosition || 0 }))
+    .sort((a, b) => a.position - b.position || a.channelName.localeCompare(b.channelName));
+}
+
+async function sendPixelBotMessage({ guildId, channelId, content }) {
+  if (!client?.isReady()) throw Object.assign(new Error("pixelbot_not_connected"), { status: 503 });
+  const channel = await client.channels.fetch(String(channelId));
+  if (!channel?.isTextBased() || channel.guildId !== String(guildId) || !channel.isSendable()) {
+    throw Object.assign(new Error("invalid_pixelbot_channel"), { status: 400 });
+  }
+  const message = await channel.send({ content: cleanMessage(content), allowedMentions: { parse: [] } });
+  return { messageId: message.id, channelId: channel.id, sentAt: message.createdAt };
+}
+
+async function sendWelcomeTest({ guildId, channelId }) {
+  if (!client?.isReady()) throw Object.assign(new Error("pixelbot_not_connected"), { status: 503 });
+  const channel = await client.channels.fetch(String(channelId));
+  if (!channel?.isTextBased() || channel.guildId !== String(guildId) || !channel.isSendable()) {
+    throw Object.assign(new Error("invalid_pixelbot_channel"), { status: 400 });
+  }
+  const embed = new EmbedBuilder().setColor(0x22d3ee).setTitle("Prueba de bienvenida de PixelBot")
+    .setDescription("Si puedes ver este mensaje, PixelBot tiene permiso para escribir en este canal.")
+    .setFooter({ text: "Mensaje de prueba · no corresponde a un ingreso real" }).setTimestamp();
+  const message = await channel.send({ embeds: [embed] });
+  return { messageId: message.id, channelId: channel.id, sentAt: message.createdAt };
+}
+
+async function processScheduledMessages() {
+  if (!client?.isReady()) return;
+  const messages = await claimDueMessages();
+  for (const message of messages) {
+    try {
+      await sendPixelBotMessage(message);
+      await finishScheduledMessage(message.id);
+    } catch (error) {
+      await finishScheduledMessage(message.id, error);
+      console.error(JSON.stringify({ event: "pixelbot_scheduled_message_error", id: message.id, error: error.message }));
+    }
+  }
 }
 
 async function handleCoupons(interaction) {
@@ -367,7 +417,9 @@ async function startPixelBot() {
     console.log(`✅ PixelBot connected as ${ready.user.tag}`);
     await syncDiscordIdentityNames();
     await announceBirthdays();
+    await processScheduledMessages();
     setInterval(() => announceBirthdays().catch(console.error), 15 * 60 * 1000).unref();
+    setInterval(() => processScheduledMessages().catch(error => console.error(JSON.stringify({ event: "pixelbot_scheduler_error", error: error.message }))), 30 * 1000).unref();
   });
   client.on(Events.GuildCreate, guild => ensureGuild({ guildId: guild.id, guildName: guild.name }).catch(console.error));
   client.on(Events.GuildMemberAdd, member => announceMemberChange(member, true).catch(error => {
@@ -418,4 +470,5 @@ async function startPixelBot() {
   return client;
 }
 
-module.exports = { startPixelBot, getPixelBotStatus, searchDiscordGuildMembers, getDiscordGuildMember };
+module.exports = { startPixelBot, getPixelBotStatus, searchDiscordGuildMembers, getDiscordGuildMember,
+  listPixelBotChannels, sendPixelBotMessage, sendWelcomeTest };

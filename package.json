@@ -11,6 +11,7 @@
     "migrate:pixelbot-welcome": "node scripts/run-migration.js add_pixelbot_welcome.sql",
     "migrate:community-profiles": "node scripts/run-migration.js unify_community_profiles.sql",
     "migrate:community-epic": "node scripts/run-migration.js add_epic_community_identity.sql",
+    "migrate:pixelbot-messages": "node scripts/run-migration.js add_pixelbot_scheduled_messages.sql",
     "migrate:pixelbot-giveaway": "node scripts/run-migration.js add_pixelbot_giveaway.sql",
     "migrate:giveaway-rounds": "node scripts/run-migration.js add_giveaway_rounds.sql",
     "discord:register": "node scripts/register-discord-commands.js",

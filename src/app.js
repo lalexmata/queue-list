@@ -9,6 +9,7 @@ const socialApiRoutes = require("./routes/api/social");
 const songRequestApiRoutes = require("./routes/api/songRequest");
 const giveawayCouponsApiRoutes = require("./routes/api/giveawayCoupons");
 const pixelbotApiRoutes = require("./routes/api/pixelbot");
+const pixelbotAdminApiRoutes = require("./routes/api/pixelbotAdmin");
 const giveawayRoundsApiRoutes = require("./routes/api/giveawayRounds");
 
 function createApp() {
@@ -57,6 +58,7 @@ function createApp() {
   app.use("/api/giveaway-coupons", giveawayCouponsApiRoutes);
   app.use("/api/giveaways", giveawayRoundsApiRoutes);
   app.use("/api/pixelbot", pixelbotApiRoutes);
+  app.use("/api/pixelbot-admin", pixelbotAdminApiRoutes);
   app.use("/api", apiRoutes);
 
   // rutas frontend
