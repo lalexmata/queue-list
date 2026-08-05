@@ -82,6 +82,7 @@ async function resolveYouTubeInput(input) {
 
 async function addSongRequest({ input, requestedBy, requesterDisplayName, platform = "twitch" }) {
   const youtubeId = await resolveYouTubeInput(input);
+  const normalizedPlatform = String(platform || "twitch").trim().toLowerCase();
 
   const metadata = await fetchYouTubeMetadata(youtubeId);
   const youtubeUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
@@ -89,8 +90,8 @@ async function addSongRequest({ input, requestedBy, requesterDisplayName, platfo
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const profileId = await findOrCreateCommunityProfile(client, {
-      platform, userId: requestedBy, displayName: requesterDisplayName || requestedBy,
+    const profileId = normalizedPlatform === "admin" ? null : await findOrCreateCommunityProfile(client, {
+      platform: normalizedPlatform, userId: requestedBy, displayName: requesterDisplayName || requestedBy,
     });
     const { rows } = await client.query(
       `INSERT INTO song_requests
@@ -99,7 +100,7 @@ async function addSongRequest({ input, requestedBy, requesterDisplayName, platfo
          (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM song_requests))
        RETURNING ${SONG_COLUMNS}`,
       [profileId, youtubeId, youtubeUrl, metadata.title, metadata.thumbnailUrl, requestedBy,
-        requesterDisplayName || requestedBy, platform]
+        requesterDisplayName || requestedBy, normalizedPlatform]
     );
     await client.query("COMMIT");
     return rows[0];

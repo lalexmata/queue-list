@@ -112,7 +112,7 @@ ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS profile_id BIGINT REFERENCES co
 DO $$
 DECLARE source RECORD; selected_profile BIGINT; normalized_platform TEXT;
 BEGIN
-  FOR source IN SELECT * FROM song_requests WHERE profile_id IS NULL LOOP
+  FOR source IN SELECT * FROM song_requests WHERE profile_id IS NULL AND LOWER(platform) <> 'admin' LOOP
     normalized_platform := CASE WHEN LOWER(source.platform) IN ('discord','twitch','youtube','kick','tiktok','facebook','instagram')
       THEN LOWER(source.platform) ELSE 'other' END;
     SELECT profile_id INTO selected_profile FROM community_identities

@@ -73,6 +73,27 @@ async function searchCommunityProfiles(rawQuery, limit = 30) {
   return rows;
 }
 
+async function listRecentCommunityActivity(limit = 25) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 25, 1), 100);
+  const { rows } = await pool.query(
+    `SELECT * FROM (
+       SELECT 'profile_created' AS type, p.id AS "profileId", p.display_name AS "displayName",
+              NULL::text AS platform, NULL::text AS "identityName", p.created_at AS "occurredAt"
+       FROM community_profiles p
+       UNION ALL
+       SELECT 'birthday_saved', p.id, p.display_name, NULL::text,
+              CONCAT(LPAD(p.birth_day::text, 2, '0'), '/', LPAD(p.birth_month::text, 2, '0')), p.updated_at
+       FROM community_profiles p WHERE p.birth_day IS NOT NULL AND p.birth_month IS NOT NULL
+       UNION ALL
+       SELECT CASE WHEN i.updated_at > i.created_at + INTERVAL '1 second' THEN 'identity_updated' ELSE 'identity_linked' END,
+              p.id, p.display_name, i.platform, i.display_name, i.updated_at
+       FROM community_identities i JOIN community_profiles p ON p.id = i.profile_id
+     ) activity ORDER BY "occurredAt" DESC LIMIT $1`,
+    [safeLimit]
+  );
+  return rows;
+}
+
 async function createCommunityProfile(data = {}) {
   const displayName = String(data.displayName || "").trim().slice(0, 100);
   if (!displayName) throw Object.assign(new Error("invalid_community_profile"), { status: 400 });
@@ -315,6 +336,37 @@ async function updateCommunityIdentity(rawProfileId, original = {}, changes = {}
   } finally { client.release(); }
 }
 
+async function deleteCommunityIdentity(rawProfileId, identity = {}) {
+  const id = profileId(rawProfileId);
+  const platform = String(identity.platform || "").trim().toLowerCase();
+  const userId = String(identity.userId || "").trim().replace(/^@+/, "").toLowerCase();
+  const communityId = String(identity.communityId || "").trim();
+  if (!IDENTITY_PLATFORMS.has(platform) || !userId) {
+    throw Object.assign(new Error("invalid_community_identity"), { status: 400 });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const owner = await client.query("SELECT id FROM community_profiles WHERE id = $1 FOR UPDATE", [id]);
+    if (!owner.rows.length) throw Object.assign(new Error("community_profile_not_found"), { status: 404 });
+    const count = await client.query("SELECT COUNT(*)::int AS count FROM community_identities WHERE profile_id = $1", [id]);
+    if (!count.rows[0] || count.rows[0].count <= 1) {
+      throw Object.assign(new Error("last_community_identity"), { status: 400 });
+    }
+    const removed = await client.query(
+      `DELETE FROM community_identities WHERE profile_id = $1 AND platform = $2
+       AND community_id = $3 AND platform_user_id = $4 RETURNING profile_id`,
+      [id, platform, communityId, userId]
+    );
+    if (!removed.rows.length) throw Object.assign(new Error("community_identity_not_found"), { status: 404 });
+    await client.query("COMMIT");
+    return getCommunityProfile(id);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally { client.release(); }
+}
+
 async function mergeCommunityProfiles(rawTargetId, rawSourceId) {
   const targetId = profileId(rawTargetId);
   const sourceId = profileId(rawSourceId);
@@ -337,6 +389,14 @@ async function mergeCommunityProfiles(rawTargetId, rawSourceId) {
        FROM community_profiles source WHERE target.id = $1 AND source.id = $2`,
       [targetId, sourceId]
     );
+    // Una fusión entre dos perfiles con Twitch representa normalmente un cambio
+    // de nombre: se conserva el Twitch de la ficha principal y se descarta el anterior.
+    await client.query(
+      `DELETE FROM community_identities source WHERE source.profile_id = $2 AND source.platform = 'twitch'
+       AND EXISTS (SELECT 1 FROM community_identities target
+                   WHERE target.profile_id = $1 AND target.platform = 'twitch')`,
+      [targetId, sourceId]
+    );
     await client.query(
       `DELETE FROM community_identities source USING community_identities target
        WHERE source.profile_id = $2 AND target.profile_id = $1
@@ -356,4 +416,4 @@ async function mergeCommunityProfiles(rawTargetId, rawSourceId) {
   } finally { client.release(); }
 }
 
-module.exports = { findOrCreateCommunityProfile, createCommunityProfile, searchCommunityProfiles, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity, mergeCommunityProfiles };
+module.exports = { findOrCreateCommunityProfile, createCommunityProfile, searchCommunityProfiles, listRecentCommunityActivity, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity, deleteCommunityIdentity, mergeCommunityProfiles };
