@@ -185,6 +185,22 @@ function cleanTwitchUsername(value) {
 }
 
 const BIRTHDAY_PLATFORMS = new Set(["discord", "twitch", "youtube", "kick"]);
+const BIRTHDAY_MONTHS = new Map([
+  ["enero", 1], ["ene", 1], ["febrero", 2], ["feb", 2], ["marzo", 3], ["mar", 3],
+  ["abril", 4], ["abr", 4], ["mayo", 5], ["may", 5], ["junio", 6], ["jun", 6],
+  ["julio", 7], ["jul", 7], ["agosto", 8], ["ago", 8],
+  ["septiembre", 9], ["setiembre", 9], ["sep", 9], ["sept", 9], ["set", 9],
+  ["octubre", 10], ["oct", 10], ["noviembre", 11], ["nov", 11],
+  ["diciembre", 12], ["dic", 12],
+]);
+
+function parseBirthdayMonth(value) {
+  const numeric = Number(value);
+  if (Number.isInteger(numeric) && numeric >= 1 && numeric <= 12) return numeric;
+  const normalized = String(value || "").trim().toLowerCase().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").replace(/\./g, "");
+  return BIRTHDAY_MONTHS.get(normalized) || NaN;
+}
 
 function cleanBirthdayIdentity(platformValue, userIdValue) {
   const platform = String(platformValue || "").trim().toLowerCase();
@@ -203,7 +219,7 @@ function cleanBirthdayIdentity(platformValue, userIdValue) {
 
 function validateBirthday(day, month, year = null) {
   const numericDay = Number(day);
-  const numericMonth = Number(month);
+  const numericMonth = parseBirthdayMonth(month);
   const numericYear = year ? Number(year) : null;
   if (numericYear !== null && (!Number.isInteger(numericYear) || numericYear < 1900 || numericYear > 2100)) {
     throw Object.assign(new Error("invalid_birthday"), { status: 400 });
@@ -344,7 +360,7 @@ async function listPlatformBirthdaysByMonth({ platform: rawPlatform, communityId
   if (!BIRTHDAY_PLATFORMS.has(platform)) {
     throw Object.assign(new Error("invalid_birthday_platform"), { status: 400 });
   }
-  const numericMonth = Number(month);
+  const numericMonth = parseBirthdayMonth(month);
   const numericDay = Number(fromDay);
   if (!Number.isInteger(numericMonth) || numericMonth < 1 || numericMonth > 12
     || !Number.isInteger(numericDay) || numericDay < 1 || numericDay > 31) {
@@ -409,4 +425,5 @@ module.exports = {
   claimBirthdayAnnouncements, releaseBirthdayAnnouncement,
   linkCouponAccount, getCouponAccount, getDiscordUsersForTwitch,
   savePlatformBirthday, getPlatformBirthday, getBirthdayProfile, listPlatformBirthdaysByMonth,
+  parseBirthdayMonth,
 };

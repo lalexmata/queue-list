@@ -6,7 +6,7 @@ const { createCommunityProfile, searchCommunityProfiles, listRecentCommunityActi
 const {
   getFortniteAccount, getBirthday, saveBirthday, listBirthdays,
   listGuildSettings,
-  savePlatformBirthday, getPlatformBirthday, getBirthdayProfile, listPlatformBirthdaysByMonth,
+  savePlatformBirthday, getPlatformBirthday, getBirthdayProfile, listPlatformBirthdaysByMonth, parseBirthdayMonth,
 } = require("../../services/pixelbot.service");
 
 const router = express.Router();
@@ -171,6 +171,28 @@ function platformBirthdayMessage(birthdays, month, upcoming) {
   return message;
 }
 
+function sendBirthdayIntegrationError(res, error, usage) {
+  const known = new Set([
+    "invalid_birthday", "invalid_birthday_query", "invalid_birthday_platform",
+    "invalid_birthday_user", "invalid_timezone", "birthday_community_required",
+    "invalid_birthday_profile", "birthday_profile_not_found",
+  ]);
+  const code = known.has(error?.message) ? error.message : "birthday_request_failed";
+  if (code === "birthday_request_failed") console.error("Birthday integration error:", error);
+  const explanations = {
+    invalid_birthday: "La fecha indicada no es válida.",
+    invalid_birthday_query: "El mes debe ser un número entre 1 y 12.",
+    invalid_birthday_platform: "La plataforma indicada no es válida.",
+    invalid_birthday_user: "No pude identificar el usuario que ejecutó el comando.",
+    invalid_timezone: "La zona horaria configurada no es válida.",
+    birthday_community_required: "Falta indicar el servidor para una cuenta de Discord.",
+    invalid_birthday_profile: "El perfil indicado no es válido.",
+    birthday_profile_not_found: "No encontré el perfil indicado.",
+    birthday_request_failed: "No pude procesar el cumpleaños en este momento.",
+  };
+  return res.json({ ok: false, status: "error", error: code, message: `${explanations[code]} ${usage}` });
+}
+
 router.put("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
   try {
     const birthday = await savePlatformBirthday({
@@ -178,7 +200,7 @@ router.put("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
       communityId: req.body.communityId || req.query.communityId || "",
     });
     res.json({ ok: true, birthday, message: `🎂 Cumpleaños de ${birthday.displayName} guardado: ${birthday.day}/${birthday.month}.` });
-  } catch (error) { sendError(res, error); }
+  } catch (error) { sendBirthdayIntegrationError(res, error, "Uso correcto: !cumple DÍA MES. Ejemplo: !cumple 25 10 o !cumple 25 octubre."); }
 });
 
 // Atajo GET para Streamer.bot, cuya subacción Fetch URL no admite PUT.
@@ -195,7 +217,7 @@ router.get("/birthdays/platforms/:platform/users/:userId/register", async (req, 
       profileId: req.query.profileId || null,
     });
     res.json({ ok: true, birthday, message: `🎂 Cumpleaños de ${birthday.displayName} guardado: ${birthday.day}/${birthday.month}.` });
-  } catch (error) { sendError(res, error); }
+  } catch (error) { sendBirthdayIntegrationError(res, error, "Uso correcto: !cumple DÍA MES. Ejemplo: !cumple 25 10 o !cumple 25 octubre."); }
 });
 
 router.get("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
@@ -206,14 +228,14 @@ router.get("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
     res.json({ ok: true, birthday, message: birthday
       ? `🎂 El cumpleaños de ${birthday.displayName} es el ${birthday.day}/${birthday.month}.`
       : `${req.params.userId} no tiene un cumpleaños registrado.` });
-  } catch (error) { sendError(res, error); }
+  } catch (error) { sendBirthdayIntegrationError(res, error, "Uso correcto: !micumple."); }
 });
 
 router.get("/birthdays/platforms/:platform", async (req, res) => {
   try {
     const timeZone = String(req.query.timezone || "America/Santiago");
     const today = localDateParts(timeZone);
-    const month = req.query.month === undefined ? today.month : Number(req.query.month);
+    const month = req.query.month === undefined ? today.month : parseBirthdayMonth(req.query.month);
     const scope = String(req.query.scope || "upcoming").toLowerCase();
     if (!["upcoming", "month"].includes(scope)) throw Object.assign(new Error("invalid_birthday_query"), { status: 400 });
     const upcoming = scope === "upcoming" && month === today.month;
@@ -223,7 +245,12 @@ router.get("/birthdays/platforms/:platform", async (req, res) => {
     });
     res.json({ ok: true, month, scope, count: birthdays.length, birthdays,
       message: platformBirthdayMessage(birthdays, month, upcoming) });
-  } catch (error) { sendError(res, error); }
+  } catch (error) {
+    const usage = String(req.query.scope || "upcoming").toLowerCase() === "month"
+      ? "Uso correcto: !cumplesmes MES. Ejemplo: !cumplesmes 10 o !cumplesmes octubre."
+      : "Uso correcto: !cumples.";
+    sendBirthdayIntegrationError(res, error, usage);
+  }
 });
 
 router.get("/birthdays/profiles/:profileId", async (req, res) => {
