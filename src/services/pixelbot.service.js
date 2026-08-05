@@ -328,6 +328,7 @@ async function getPlatformBirthday({ platform: rawPlatform, userId: rawUserId, c
      FROM community_identities i
      JOIN community_profiles p ON p.id = i.profile_id
      WHERE i.platform = $1 AND ($2 = '' OR i.community_id = $2) AND i.platform_user_id = $3
+       AND p.birth_day IS NOT NULL AND p.birth_month IS NOT NULL
      ORDER BY CASE WHEN i.community_id = $2 THEN 0 ELSE 1 END, i.created_at
      LIMIT 1`,
     [platform, scope, userId]

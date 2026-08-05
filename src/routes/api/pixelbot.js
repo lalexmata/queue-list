@@ -225,9 +225,10 @@ router.get("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
     const birthday = await getPlatformBirthday({
       platform: req.params.platform, userId: req.params.userId, communityId: req.query.communityId || "",
     });
-    res.json({ ok: true, birthday, message: birthday
+    const hasBirthday = birthday?.day != null && birthday?.month != null;
+    res.json({ ok: true, birthday: hasBirthday ? birthday : null, message: hasBirthday
       ? `🎂 El cumpleaños de ${birthday.displayName} es el ${birthday.day}/${birthday.month}.`
-      : `${req.params.userId} no tiene un cumpleaños registrado.` });
+      : `${req.params.userId} no tiene un cumpleaños registrado. Puede guardarlo con !cumple DÍA MES. Ejemplo: !cumple 25 octubre.` });
   } catch (error) { sendBirthdayIntegrationError(res, error, "Uso correcto: !micumple."); }
 });
 
@@ -264,7 +265,10 @@ router.get("/birthdays/profiles/:profileId", async (req, res) => {
 router.get("/birthdays/:guildId/:discordUserId", requireIntegrationKey, async (req, res) => {
   try {
     const birthday = await getBirthday(req.params.guildId, req.params.discordUserId);
-    res.json({ ok: true, birthday, message: birthday ? `Cumpleaños: ${birthday.day}/${birthday.month}.` : "No hay cumpleaños registrado." });
+    const hasBirthday = birthday?.day != null && birthday?.month != null;
+    res.json({ ok: true, birthday: hasBirthday ? birthday : null,
+      message: hasBirthday ? `Cumpleaños: ${birthday.day}/${birthday.month}.`
+        : "No hay cumpleaños registrado. Puede guardarlo con /cumpleanos registrar indicando el día y el mes." });
   } catch (error) { sendError(res, error); }
 });
 

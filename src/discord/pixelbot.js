@@ -128,7 +128,10 @@ async function handleBirthday(interaction) {
     return interaction.editReply({ embeds: [embed] });
   }
   const birthday = await getBirthday(interaction.guildId, interaction.user.id);
-  return interaction.editReply({ content: birthday ? `Tu cumpleaños registrado es **${birthday.day}/${birthday.month}**.` : "No tienes un cumpleaños registrado." });
+  const hasBirthday = birthday?.day != null && birthday?.month != null;
+  return interaction.editReply({ content: hasBirthday
+    ? `Tu cumpleaños registrado es **${birthday.day}/${birthday.month}**.`
+    : "No tienes un cumpleaños registrado. Puedes guardarlo ahora con `/cumpleanos registrar`." });
 }
 
 async function syncDiscordIdentityNames() {
