@@ -8,6 +8,25 @@ function profileId(value) {
 
 const IDENTITY_PLATFORMS = new Set(["discord", "twitch", "youtube", "kick", "epic", "tiktok", "facebook", "instagram", "other", "unknown"]);
 
+function cleanAliases(value) {
+  const entries = Array.isArray(value) ? value : String(value || "").split(/[,\n]/);
+  const unique = new Map();
+  for (const entry of entries) {
+    const alias = String(entry || "").trim().slice(0, 100);
+    if (alias) unique.set(alias.toLowerCase(), alias);
+  }
+  return [...unique.values()].slice(0, 20);
+}
+
+async function moveProfileAliases(db, targetId, sourceId) {
+  await db.query(
+    `DELETE FROM community_profile_aliases source USING community_profile_aliases target
+     WHERE source.profile_id = $2 AND target.profile_id = $1 AND LOWER(source.alias) = LOWER(target.alias)`,
+    [targetId, sourceId]
+  );
+  await db.query("UPDATE community_profile_aliases SET profile_id = $1 WHERE profile_id = $2", [targetId, sourceId]);
+}
+
 async function findOrCreateCommunityProfile(db, { platform: rawPlatform, userId: rawUserId, displayName, communityId = "" }) {
   const platform = String(rawPlatform || "other").trim().toLowerCase();
   const userId = String(rawUserId || "").trim().replace(/^@+/, "").toLowerCase();
@@ -54,6 +73,8 @@ async function searchCommunityProfiles(rawQuery, limit = 30) {
   const { rows } = await pool.query(
     `SELECT p.id AS "profileId", p.display_name AS "displayName",
             p.birth_day AS day, p.birth_month AS month, p.birth_year AS year,
+            COALESCE((SELECT JSON_AGG(a.alias ORDER BY LOWER(a.alias)) FROM community_profile_aliases a
+                      WHERE a.profile_id = p.id), '[]') AS aliases,
             JSON_AGG(JSON_BUILD_OBJECT(
               'platform', i.platform, 'communityId', i.community_id,
               'communityName', CASE WHEN i.platform = 'discord' THEN
@@ -63,6 +84,7 @@ async function searchCommunityProfiles(rawQuery, limit = 30) {
      FROM community_profiles p
      JOIN community_identities i ON i.profile_id = p.id
      WHERE p.display_name ILIKE $1 OR i.display_name ILIKE $1 OR i.platform_user_id ILIKE $1
+        OR EXISTS (SELECT 1 FROM community_profile_aliases a WHERE a.profile_id = p.id AND a.alias ILIKE $1)
      GROUP BY p.id
      ORDER BY CASE WHEN LOWER(p.display_name) = LOWER($2) THEN 0
                    WHEN BOOL_OR(LOWER(i.platform_user_id) = LOWER($2)) THEN 1 ELSE 2 END,
@@ -127,6 +149,8 @@ async function getCommunityProfile(rawId) {
     `SELECT p.id AS "profileId", p.display_name AS "displayName", p.notes,
             p.birth_day AS day, p.birth_month AS month, p.birth_year AS year,
             p.created_at AS "createdAt", p.updated_at AS "updatedAt",
+            COALESCE((SELECT JSON_AGG(a.alias ORDER BY LOWER(a.alias)) FROM community_profile_aliases a
+                      WHERE a.profile_id = p.id), '[]') AS aliases,
             COALESCE(JSON_AGG(JSON_BUILD_OBJECT(
               'platform', i.platform, 'communityId', i.community_id,
               'communityName', CASE WHEN i.platform = 'discord' THEN
@@ -187,6 +211,7 @@ async function updateCommunityProfile(rawId, changes = {}) {
   const id = profileId(rawId);
   const displayName = changes.displayName === undefined ? undefined : String(changes.displayName || "").trim().slice(0, 100) || null;
   const notes = changes.notes === undefined ? undefined : String(changes.notes || "").trim().slice(0, 2000) || null;
+  const aliases = changes.aliases === undefined ? undefined : cleanAliases(changes.aliases);
   let birthday;
   if (changes.day !== undefined || changes.month !== undefined || changes.year !== undefined) {
     if (changes.day === null || changes.day === "" || changes.month === null || changes.month === "") {
@@ -203,7 +228,7 @@ async function updateCommunityProfile(rawId, changes = {}) {
       birthday = { day, month, year };
     }
   }
-  if (displayName === undefined && notes === undefined && birthday === undefined) return getCommunityProfile(id);
+  if (displayName === undefined && notes === undefined && birthday === undefined && aliases === undefined) return getCommunityProfile(id);
   const sets = [];
   const values = [id];
   if (displayName !== undefined) { values.push(displayName); sets.push(`display_name = $${values.length}`); }
@@ -212,10 +237,28 @@ async function updateCommunityProfile(rawId, changes = {}) {
     values.push(birthday.day, birthday.month, birthday.year);
     sets.push(`birth_day = $${values.length - 2}`, `birth_month = $${values.length - 1}`, `birth_year = $${values.length}`);
   }
-  const { rowCount } = await pool.query(
-    `UPDATE community_profiles SET ${sets.join(", ")}, updated_at = NOW() WHERE id = $1`, values
-  );
-  return rowCount ? getCommunityProfile(id) : null;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    let exists;
+    if (sets.length) {
+      exists = await client.query(`UPDATE community_profiles SET ${sets.join(", ")}, updated_at = NOW() WHERE id = $1 RETURNING id`, values);
+    } else {
+      exists = await client.query("SELECT id FROM community_profiles WHERE id = $1 FOR UPDATE", [id]);
+    }
+    if (!exists.rows.length) { await client.query("ROLLBACK"); return null; }
+    if (aliases !== undefined) {
+      await client.query("DELETE FROM community_profile_aliases WHERE profile_id = $1", [id]);
+      for (const alias of aliases) {
+        await client.query("INSERT INTO community_profile_aliases (profile_id, alias) VALUES ($1, $2)", [id, alias]);
+      }
+    }
+    await client.query("COMMIT");
+    return getCommunityProfile(id);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally { client.release(); }
 }
 
 async function addCommunityIdentity(rawProfileId, data = {}) {
@@ -247,6 +290,7 @@ async function addCommunityIdentity(rawProfileId, data = {}) {
          FROM community_profiles source WHERE target.id = $1 AND source.id = $2`,
         [targetId, sourceId]
       );
+      await moveProfileAliases(client, targetId, sourceId);
       for (const table of ["community_identities", "giveaway_participants", "song_requests", "queue_items"]) {
         await client.query(`UPDATE ${table} SET profile_id = $1 WHERE profile_id = $2`, [targetId, sourceId]);
       }
@@ -311,6 +355,7 @@ async function updateCommunityIdentity(rawProfileId, original = {}, changes = {}
            AND source.platform_user_id = target.platform_user_id`,
         [targetId, sourceId]
       );
+      await moveProfileAliases(client, targetId, sourceId);
       for (const table of ["community_identities", "giveaway_participants", "song_requests", "queue_items"]) {
         await client.query(`UPDATE ${table} SET profile_id = $1 WHERE profile_id = $2`, [targetId, sourceId]);
       }
@@ -404,6 +449,7 @@ async function mergeCommunityProfiles(rawTargetId, rawSourceId) {
          AND source.platform_user_id = target.platform_user_id`,
       [targetId, sourceId]
     );
+    await moveProfileAliases(client, targetId, sourceId);
     for (const table of ["community_identities", "giveaway_participants", "song_requests", "queue_items"]) {
       await client.query(`UPDATE ${table} SET profile_id = $1 WHERE profile_id = $2`, [targetId, sourceId]);
     }
