@@ -58,6 +58,10 @@ abandona el servidor. Ignora cuentas bot. Para habilitarlo, aplica la migración
 `npm run migrate:pixelbot-welcome`, vuelve a registrar los comandos con
 `npm run discord:register` y configura el canal con `/pixelbot canal-bienvenida`.
 
+El evento de ingreso requiere **Server Members Intent**. El canal debe permitir al
+bot **Ver canal** y **Enviar mensajes**; **Insertar enlaces** es opcional y, si no
+está disponible, PixelBot envía una bienvenida simple en texto.
+
 PixelBot también responde cuando un usuario lo menciona en un mensaje. Esta función
 solo escucha eventos de mensajes y no requiere activar intents privilegiados.
 

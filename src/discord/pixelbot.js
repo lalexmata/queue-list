@@ -321,7 +321,8 @@ async function announceMemberChange(member, joined) {
   const settings = await getGuildSettings(member.guild.id);
   if (!settings?.welcomeChannelId) return;
   const channel = await member.guild.channels.fetch(settings.welcomeChannelId);
-  if (!channel?.isTextBased()) throw new Error("welcome_channel_not_text");
+  if (!channel?.isTextBased() || !channel.isSendable()) throw new Error("welcome_channel_not_sendable");
+  const canEmbed = channel.permissionsFor(member.guild.members.me)?.has(PermissionFlagsBits.EmbedLinks) === true;
 
   if (joined) {
     const embed = new EmbedBuilder()
@@ -331,7 +332,10 @@ async function announceMemberChange(member, joined) {
       .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
       .setFooter({ text: `Ya somos ${member.guild.memberCount} miembros` })
       .setTimestamp();
-    await channel.send({ content: `<@${member.id}>`, embeds: [embed], allowedMentions: { users: [member.id] } });
+    const payload = canEmbed
+      ? { content: `<@${member.id}>`, embeds: [embed], allowedMentions: { users: [member.id] } }
+      : { content: `¡Bienvenido al servidor, <@${member.id}>! Esperamos que disfrutes la comunidad.`, allowedMentions: { users: [member.id] } };
+    await channel.send(payload);
     return;
   }
 
@@ -344,7 +348,7 @@ async function announceMemberChange(member, joined) {
     .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
     .setFooter({ text: `${member.guild.memberCount} miembros en el servidor` })
     .setTimestamp();
-  await channel.send({ embeds: [embed] });
+  await channel.send(canEmbed ? { embeds: [embed] } : { content: `**${displayName}** dejó el servidor.` });
 }
 
 function localDateParts(timeZone) {
