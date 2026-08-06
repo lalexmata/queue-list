@@ -296,7 +296,14 @@ async function handleGiveaway(interaction) {
 }
 
 async function handleConfig(interaction) {
-  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ content: "Necesitas el permiso Gestionar servidor.", ephemeral: true });
+  const settings = await getGuildSettings(interaction.guildId);
+  const isOwner = interaction.guild?.ownerId === interaction.user.id;
+  const isModerator = interaction.memberPermissions?.has(PermissionFlagsBits.ModerateMembers)
+    || interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+  const hasConfiguredRole = settings?.adminRoleId && interaction.member?.roles?.cache?.has(settings.adminRoleId);
+  if (!isOwner && !isModerator && !hasConfiguredRole) {
+    return interaction.reply({ content: "Solo el dueño del servidor y sus moderadores pueden configurar PixelBot.", ephemeral: true });
+  }
   if (interaction.options.getSubcommand() === "canal") {
     const channel = interaction.options.getChannel("canal", true);
     await updateGuildSettings(interaction.guildId, { allowedChannelId: channel.id });
@@ -319,7 +326,6 @@ async function handleConfig(interaction) {
       ? "Este servidor recibirá los cumpleaños de perfiles sin servidor asignado."
       : "Este servidor dejó de ser el destino predeterminado de cumpleaños.", ephemeral: true });
   }
-  const settings = await getGuildSettings(interaction.guildId);
   return interaction.reply({ content: `Canal: ${settings?.allowedChannelId ? `<#${settings.allowedChannelId}>` : "todos"}\nCanal de cumpleaños: ${settings?.birthdayChannelId ? `<#${settings.birthdayChannelId}>` : "usa el canal general"}\nServidor predeterminado de cumpleaños: ${settings?.isDefaultBirthdayGuild ? "sí" : "no"}\nCanal de bienvenida: ${settings?.welcomeChannelId ? `<#${settings.welcomeChannelId}>` : "sin configurar"}\nZona horaria: ${settings?.timezone || "America/Santiago"}`, ephemeral: true });
 }
 

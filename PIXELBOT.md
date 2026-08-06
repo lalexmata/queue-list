@@ -50,6 +50,10 @@ No publiques estas claves ni las agregues al repositorio.
 - `/pixelbot servidor-cumpleanos-default activo:` configura el servidor para cumpleaños sin destino asignado.
 - `/pixelbot estado`
 
+Discord solo muestra los comandos `/pixelbot` al dueño del servidor y a miembros
+con permiso **Moderar miembros**. PixelBot vuelve a comprobar esa autorización al
+ejecutar cada cambio de configuración.
+
 PixelBot revisa los cumpleaños cada 15 minutos según la zona horaria configurada
 y felicita una sola vez por usuario y fecha. Si no se define un canal de cumpleaños,
 utiliza el canal general de PixelBot.

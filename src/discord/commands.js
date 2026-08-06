@@ -27,7 +27,7 @@ const commands = [
     .addSubcommand(sub => sub.setName("activar").setDescription("Activa el sorteo (requiere Gestionar servidor)"))
     .addSubcommand(sub => sub.setName("desactivar").setDescription("Cierra el sorteo (requiere Gestionar servidor)")),
   new SlashCommandBuilder().setName("pixelbot").setDescription("Configura PixelBot")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .addSubcommand(sub => sub.setName("canal").setDescription("Establece el canal permitido")
       .addChannelOption(opt => opt.setName("canal").setDescription("Canal para comandos").setRequired(true)))
     .addSubcommand(sub => sub.setName("canal-cumpleanos").setDescription("Establece el canal de felicitaciones")
