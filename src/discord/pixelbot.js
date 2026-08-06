@@ -371,10 +371,14 @@ async function announceBirthdays() {
       if (!claimed.users.length) continue;
       for (const user of claimed.users) {
         try {
-          await channel.send(`🎉 ¡Feliz cumpleaños <@${user.discordUserId}>! Que tengas un día increíble, lleno de buenas partidas y muchas victorias. 🎂🥳`);
+          const recipient = user.discordUserId ? `<@${user.discordUserId}>` : `**${user.displayName}**`;
+          await channel.send({
+            content: `🎉 ¡Feliz cumpleaños ${recipient}! Que tengas un día increíble, lleno de buenas partidas y muchas victorias. 🎂🥳`,
+            allowedMentions: user.discordUserId ? { users: [user.discordUserId] } : { parse: [] },
+          });
         } catch (error) {
-          await releaseBirthdayAnnouncement(settings.guildId, user.discordUserId, claimed.date);
-          console.error(`PixelBot birthday message error (${user.discordUserId}):`, error);
+          await releaseBirthdayAnnouncement(settings.guildId, user.announcementKey, claimed.date);
+          console.error(`PixelBot birthday message error (${user.announcementKey}):`, error);
         }
       }
     } catch (error) {

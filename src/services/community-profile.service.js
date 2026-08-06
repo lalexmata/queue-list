@@ -77,7 +77,7 @@ async function searchCommunityProfiles(rawQuery, limit = 30) {
                       WHERE a.profile_id = p.id), '[]') AS aliases,
             JSON_AGG(JSON_BUILD_OBJECT(
               'platform', i.platform, 'communityId', i.community_id,
-              'communityName', CASE WHEN i.platform = 'discord' THEN
+              'communityName', CASE WHEN i.community_id <> '' THEN
                 (SELECT guild_name FROM discord_guild_settings WHERE guild_id = i.community_id) ELSE NULL END,
               'userId', i.platform_user_id, 'displayName', i.display_name
             ) ORDER BY i.platform, LOWER(i.display_name)) AS identities
@@ -153,7 +153,7 @@ async function getCommunityProfile(rawId) {
                       WHERE a.profile_id = p.id), '[]') AS aliases,
             COALESCE(JSON_AGG(JSON_BUILD_OBJECT(
               'platform', i.platform, 'communityId', i.community_id,
-              'communityName', CASE WHEN i.platform = 'discord' THEN
+              'communityName', CASE WHEN i.community_id <> '' THEN
                 (SELECT guild_name FROM discord_guild_settings WHERE guild_id = i.community_id) ELSE NULL END,
               'userId', i.platform_user_id, 'displayName', i.display_name
             ) ORDER BY i.platform, LOWER(i.display_name)) FILTER (WHERE i.profile_id IS NOT NULL), '[]') AS identities

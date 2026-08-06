@@ -132,10 +132,8 @@ async function listBirthdays(guildId) {
                       i.created_at LIMIT 1) AS "identityName"
      FROM community_profiles p
      WHERE p.birth_month IS NOT NULL AND p.birth_day IS NOT NULL
-       AND (EXISTS (SELECT 1 FROM community_identities d
-                    WHERE d.profile_id = p.id AND d.platform = 'discord' AND d.community_id = $1)
-            OR NOT EXISTS (SELECT 1 FROM community_identities d
-                           WHERE d.profile_id = p.id AND d.platform = 'discord'))
+       AND EXISTS (SELECT 1 FROM community_identities member
+                   WHERE member.profile_id = p.id AND member.community_id = $1)
      ORDER BY p.birth_month, p.birth_day, LOWER(COALESCE(p.display_name, ''))`,
     [String(guildId)]
   );
@@ -155,24 +153,39 @@ async function listBirthdayGuilds() {
 async function claimBirthdayAnnouncements({ guildId, year, month, day }) {
   const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   const { rows } = await pool.query(
-    `INSERT INTO birthday_announcements (guild_id, discord_user_id, announcement_date)
-     SELECT i.community_id, i.platform_user_id, $4::date
-     FROM community_identities i
-     JOIN community_profiles p ON p.id = i.profile_id
-     WHERE i.platform = 'discord' AND i.community_id = $1
-       AND p.birth_month = $2 AND p.birth_day = $3
-     ON CONFLICT (guild_id, discord_user_id, announcement_date) DO NOTHING
-     RETURNING discord_user_id AS "discordUserId"`,
+    `WITH candidates AS (
+       SELECT p.id AS profile_id, COALESCE(NULLIF(p.display_name, ''),
+                (SELECT NULLIF(i.display_name, '') FROM community_identities i
+                 WHERE i.profile_id = p.id ORDER BY i.created_at LIMIT 1),
+                'alguien de la comunidad') AS display_name,
+              (SELECT d.platform_user_id FROM community_identities d
+               WHERE d.profile_id = p.id AND d.platform = 'discord' AND d.community_id = $1
+               ORDER BY d.created_at LIMIT 1) AS discord_user_id
+       FROM community_profiles p
+       WHERE p.birth_month = $2 AND p.birth_day = $3
+         AND EXISTS (SELECT 1 FROM community_identities member
+                     WHERE member.profile_id = p.id AND member.community_id = $1)
+     ), inserted AS (
+       INSERT INTO birthday_announcements (guild_id, discord_user_id, announcement_date)
+       SELECT $1, COALESCE(discord_user_id, 'profile:' || profile_id::text), $4::date
+       FROM candidates
+       ON CONFLICT (guild_id, discord_user_id, announcement_date) DO NOTHING
+       RETURNING discord_user_id
+     )
+     SELECT candidates.discord_user_id AS "discordUserId", candidates.display_name AS "displayName",
+            inserted.discord_user_id AS "announcementKey"
+     FROM inserted JOIN candidates
+       ON inserted.discord_user_id = COALESCE(candidates.discord_user_id, 'profile:' || candidates.profile_id::text)`,
     [String(guildId), Number(month), Number(day), date]
   );
   return { date, users: rows };
 }
 
-async function releaseBirthdayAnnouncement(guildId, discordUserId, date) {
+async function releaseBirthdayAnnouncement(guildId, announcementKey, date) {
   await pool.query(
     `DELETE FROM birthday_announcements
      WHERE guild_id = $1 AND discord_user_id = $2 AND announcement_date = $3::date`,
-    [String(guildId), String(discordUserId), date]
+    [String(guildId), String(announcementKey), date]
   );
 }
 

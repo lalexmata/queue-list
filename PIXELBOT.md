@@ -53,6 +53,10 @@ PixelBot revisa los cumpleaños cada 15 minutos según la zona horaria configura
 y felicita una sola vez por usuario y fecha. Si no se define un canal de cumpleaños,
 utiliza el canal general de PixelBot.
 
+Para perfiles sin cuenta de Discord, asigna al menos una de sus identidades de
+plataforma al servidor desde el panel de comunidad. PixelBot publicará su nombre
+visible en lugar de una mención. Si tiene Discord vinculado, lo mencionará.
+
 PixelBot publica una bienvenida cuando entra una persona y una despedida cuando
 abandona el servidor. Ignora cuentas bot. Para habilitarlo, aplica la migración
 `npm run migrate:pixelbot-welcome`, vuelve a registrar los comandos con

@@ -132,7 +132,7 @@
             <label>Plataforma<select id="identityPlatform"><option value="twitch">Twitch</option><option value="discord">Discord</option><option value="youtube">YouTube</option><option value="kick">Kick</option><option value="epic">Epic Games</option><option value="tiktok">TikTok</option></select></label>
             <label>Usuario o ID<input id="identityUserId" required maxlength="100"></label>
             <label>Nombre visible<input id="identityDisplayName" required maxlength="100"></label>
-            <label id="identityGuildField">Servidor(es) de Discord<select id="identityCommunityId" multiple size="4"></select><small style="color:var(--muted);font-weight:500">Puedes seleccionar varios con Ctrl/Cmd.</small></label>
+            <label id="identityGuildField">Servidor(es) donde participa<select id="identityCommunityId" multiple size="4"></select><small style="color:var(--muted);font-weight:500">Esto permite anunciar su cumpleaños aunque no tenga Discord. Puedes seleccionar varios con Ctrl/Cmd.</small></label>
             <label id="identityMemberField">Buscar miembro<input id="identityMemberQuery" minlength="2" placeholder="Apodo o usuario de Discord"><small style="color:var(--muted);font-weight:500">Busca dentro de los servidores seleccionados.</small></label>
           </div><div class="actions"><button id="identitySubmit" class="primary" type="submit">Vincular identidad</button><button id="unlinkIdentity" class="secondary" type="button" style="display:none;color:#fca5a5">Desvincular cuenta</button></div><p id="identityStatus" class="status"></p></form>
           <div id="identityMemberResults" class="history"></div>
@@ -230,7 +230,7 @@
       const data=await request('/api/pixelbot/community/discord-guilds');discordGuilds=data.guilds||[];
       $('identityCommunityId').innerHTML=discordGuilds.length?discordGuilds.map(guild=>`<option value="${escapeHtml(guild.guildId)}">${escapeHtml(guild.guildName||guild.guildId)}</option>`).join(''):'<option disabled>No hay servidores registrados</option>';
     }
-    function updateIdentityGuildVisibility(){const discord=$('identityPlatform').value==='discord';$('identityGuildField').style.display=discord?'grid':'none';$('identityMemberField').style.display=discord?'grid':'none';$('identityCommunityId').required=discord;if(!discord)$('identityMemberResults').innerHTML='';}
+    function updateIdentityGuildVisibility(){const discord=$('identityPlatform').value==='discord';$('identityGuildField').style.display='grid';$('identityMemberField').style.display=discord?'grid':'none';$('identityCommunityId').required=discord;if(!discord)$('identityMemberResults').innerHTML='';}
     async function searchDiscordMembers(){
       const query=$('identityMemberQuery').value.trim();const guildIds=[...$('identityCommunityId').selectedOptions].map(option=>option.value);
       if(query.length<2||!guildIds.length){$('identityMemberResults').innerHTML='';return;}
@@ -273,8 +273,8 @@
     });
     $('identityForm').addEventListener('submit',async event=>{
       event.preventDefault(); if(!currentProfile&&!creatingProfile)return; setStatus('identityStatus',creatingProfile?'Creando perfil…':'Vinculando…');
-      const platform=$('identityPlatform').value;const communities=platform==='discord'?[...$('identityCommunityId').selectedOptions].map(option=>option.value):[''];
-      if(platform==='discord'&&!communities.length)return setStatus('identityStatus','Selecciona al menos un servidor de Discord.','error');
+      const platform=$('identityPlatform').value;const selectedCommunities=[...$('identityCommunityId').selectedOptions].map(option=>option.value);const communities=selectedCommunities.length?selectedCommunities:[''];
+      if(platform==='discord'&&!selectedCommunities.length)return setStatus('identityStatus','Selecciona al menos un servidor de Discord.','error');
       try{const bodyFor=communityId=>({platform,userId:$('identityUserId').value.trim(),displayName:$('identityDisplayName').value.trim(),communityId});if(creatingProfile){const first=bodyFor(communities[0]);const data=await request('/api/pixelbot/community/profiles',{method:'POST',body:JSON.stringify({...first,displayName:$('identityPersonName').value.trim(),identityDisplayName:first.displayName})});currentProfile=data.profile;for(const communityId of communities.slice(1))await request(`/api/pixelbot/community/profiles/${currentProfile.profileId}/identities`,{method:'POST',body:JSON.stringify(bodyFor(communityId))});}else if(editingIdentity){const firstCommunity=communities[0];await request(`/api/pixelbot/community/profiles/${currentProfile.profileId}/identities/${encodeURIComponent(editingIdentity.platform)}/${encodeURIComponent(editingIdentity.userId)}?communityId=${encodeURIComponent(editingIdentity.communityId||'')}`,{method:'PATCH',body:JSON.stringify(bodyFor(firstCommunity))});for(const communityId of communities.slice(1))await request(`/api/pixelbot/community/profiles/${currentProfile.profileId}/identities`,{method:'POST',body:JSON.stringify(bodyFor(communityId))});}else{for(const communityId of communities)await request(`/api/pixelbot/community/profiles/${currentProfile.profileId}/identities`,{method:'POST',body:JSON.stringify(bodyFor(communityId))});}creatingProfile=false;editingIdentity=null;$('identityEditor').close();await openFullProfile(currentProfile.profileId);}catch(error){setStatus('identityStatus',error.message,'error');}
     });
     $('identityPlatform').addEventListener('change',updateIdentityGuildVisibility);
