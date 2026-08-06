@@ -17,7 +17,7 @@ async function getGuildSettings(guildId) {
             birthday_channel_id AS "birthdayChannelId", welcome_channel_id AS "welcomeChannelId",
             admin_role_id AS "adminRoleId", timezone,
             fortnite_enabled AS "fortniteEnabled", birthdays_enabled AS "birthdaysEnabled",
-            giveaway_active AS "giveawayActive"
+            giveaway_active AS "giveawayActive", is_default_birthday_guild AS "isDefaultBirthdayGuild"
      FROM discord_guild_settings WHERE guild_id = $1`, [String(guildId)]
   );
   return rows[0] || null;
@@ -27,7 +27,8 @@ async function listGuildSettings() {
   const { rows } = await pool.query(
     `SELECT guild_id AS "guildId", COALESCE(guild_name, guild_id) AS "guildName",
             giveaway_active AS "giveawayActive", allowed_channel_id AS "allowedChannelId",
-            welcome_channel_id AS "welcomeChannelId", birthday_channel_id AS "birthdayChannelId"
+            welcome_channel_id AS "welcomeChannelId", birthday_channel_id AS "birthdayChannelId",
+            is_default_birthday_guild AS "isDefaultBirthdayGuild"
      FROM discord_guild_settings
      ORDER BY LOWER(COALESCE(guild_name, guild_id))`
   );
@@ -36,8 +37,17 @@ async function listGuildSettings() {
 
 async function updateGuildSettings(guildId, changes) {
   await ensureGuild({ guildId });
-  const allowed = ["allowedChannelId", "birthdayChannelId", "welcomeChannelId", "adminRoleId", "timezone", "giveawayActive"];
-  const columns = { allowedChannelId: "allowed_channel_id", birthdayChannelId: "birthday_channel_id", welcomeChannelId: "welcome_channel_id", adminRoleId: "admin_role_id", timezone: "timezone", giveawayActive: "giveaway_active" };
+  const allowed = ["allowedChannelId", "birthdayChannelId", "welcomeChannelId", "adminRoleId", "timezone", "giveawayActive", "isDefaultBirthdayGuild"];
+  const columns = { allowedChannelId: "allowed_channel_id", birthdayChannelId: "birthday_channel_id", welcomeChannelId: "welcome_channel_id", adminRoleId: "admin_role_id", timezone: "timezone", giveawayActive: "giveaway_active", isDefaultBirthdayGuild: "is_default_birthday_guild" };
+  if (changes.isDefaultBirthdayGuild === true) {
+    await pool.query(
+      `UPDATE discord_guild_settings SET is_default_birthday_guild = (guild_id = $1), updated_at = NOW()
+       WHERE is_default_birthday_guild = TRUE OR guild_id = $1`,
+      [String(guildId)]
+    );
+    changes = { ...changes };
+    delete changes.isDefaultBirthdayGuild;
+  }
   const entries = allowed.filter(key => changes[key] !== undefined);
   if (!entries.length) return getGuildSettings(guildId);
   const values = entries.map(key => changes[key] ?? null);
@@ -132,8 +142,12 @@ async function listBirthdays(guildId) {
                       i.created_at LIMIT 1) AS "identityName"
      FROM community_profiles p
      WHERE p.birth_month IS NOT NULL AND p.birth_day IS NOT NULL
-       AND EXISTS (SELECT 1 FROM community_identities member
-                   WHERE member.profile_id = p.id AND member.community_id = $1)
+       AND (EXISTS (SELECT 1 FROM community_identities member
+                    WHERE member.profile_id = p.id AND member.community_id = $1)
+            OR (EXISTS (SELECT 1 FROM discord_guild_settings settings
+                        WHERE settings.guild_id = $1 AND settings.is_default_birthday_guild = TRUE)
+                AND NOT EXISTS (SELECT 1 FROM community_identities assigned
+                                WHERE assigned.profile_id = p.id AND assigned.community_id <> '')))
      ORDER BY p.birth_month, p.birth_day, LOWER(COALESCE(p.display_name, ''))`,
     [String(guildId)]
   );
@@ -142,7 +156,8 @@ async function listBirthdays(guildId) {
 
 async function listBirthdayGuilds() {
   const { rows } = await pool.query(
-    `SELECT guild_id AS "guildId", COALESCE(birthday_channel_id, allowed_channel_id) AS "channelId", timezone
+    `SELECT guild_id AS "guildId", COALESCE(birthday_channel_id, allowed_channel_id) AS "channelId", timezone,
+            is_default_birthday_guild AS "isDefaultBirthdayGuild"
      FROM discord_guild_settings
      WHERE birthdays_enabled = TRUE
        AND COALESCE(birthday_channel_id, allowed_channel_id) IS NOT NULL`
@@ -150,7 +165,7 @@ async function listBirthdayGuilds() {
   return rows;
 }
 
-async function claimBirthdayAnnouncements({ guildId, year, month, day }) {
+async function claimBirthdayAnnouncements({ guildId, year, month, day, isDefaultBirthdayGuild = false }) {
   const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   const { rows } = await pool.query(
     `WITH candidates AS (
@@ -163,8 +178,11 @@ async function claimBirthdayAnnouncements({ guildId, year, month, day }) {
                ORDER BY d.created_at LIMIT 1) AS discord_user_id
        FROM community_profiles p
        WHERE p.birth_month = $2 AND p.birth_day = $3
-         AND EXISTS (SELECT 1 FROM community_identities member
-                     WHERE member.profile_id = p.id AND member.community_id = $1)
+         AND (EXISTS (SELECT 1 FROM community_identities member
+                      WHERE member.profile_id = p.id AND member.community_id = $1)
+              OR ($5::boolean = TRUE
+                  AND NOT EXISTS (SELECT 1 FROM community_identities assigned
+                                  WHERE assigned.profile_id = p.id AND assigned.community_id <> '')))
      ), inserted AS (
        INSERT INTO birthday_announcements (guild_id, discord_user_id, announcement_date)
        SELECT $1, COALESCE(discord_user_id, 'profile:' || profile_id::text), $4::date
@@ -176,7 +194,7 @@ async function claimBirthdayAnnouncements({ guildId, year, month, day }) {
             inserted.discord_user_id AS "announcementKey"
      FROM inserted JOIN candidates
        ON inserted.discord_user_id = COALESCE(candidates.discord_user_id, 'profile:' || candidates.profile_id::text)`,
-    [String(guildId), Number(month), Number(day), date]
+    [String(guildId), Number(month), Number(day), date, Boolean(isDefaultBirthdayGuild)]
   );
   return { date, users: rows };
 }

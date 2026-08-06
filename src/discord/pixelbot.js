@@ -312,8 +312,15 @@ async function handleConfig(interaction) {
     await updateGuildSettings(interaction.guildId, { welcomeChannelId: channel.id });
     return interaction.reply({ content: `Las bienvenidas y despedidas se publicarán en ${channel}.`, ephemeral: true });
   }
+  if (interaction.options.getSubcommand() === "servidor-cumpleanos-default") {
+    const active = interaction.options.getBoolean("activo", true);
+    await updateGuildSettings(interaction.guildId, { isDefaultBirthdayGuild: active });
+    return interaction.reply({ content: active
+      ? "Este servidor recibirá los cumpleaños de perfiles sin servidor asignado."
+      : "Este servidor dejó de ser el destino predeterminado de cumpleaños.", ephemeral: true });
+  }
   const settings = await getGuildSettings(interaction.guildId);
-  return interaction.reply({ content: `Canal: ${settings?.allowedChannelId ? `<#${settings.allowedChannelId}>` : "todos"}\nCanal de cumpleaños: ${settings?.birthdayChannelId ? `<#${settings.birthdayChannelId}>` : "usa el canal general"}\nCanal de bienvenida: ${settings?.welcomeChannelId ? `<#${settings.welcomeChannelId}>` : "sin configurar"}\nZona horaria: ${settings?.timezone || "America/Santiago"}`, ephemeral: true });
+  return interaction.reply({ content: `Canal: ${settings?.allowedChannelId ? `<#${settings.allowedChannelId}>` : "todos"}\nCanal de cumpleaños: ${settings?.birthdayChannelId ? `<#${settings.birthdayChannelId}>` : "usa el canal general"}\nServidor predeterminado de cumpleaños: ${settings?.isDefaultBirthdayGuild ? "sí" : "no"}\nCanal de bienvenida: ${settings?.welcomeChannelId ? `<#${settings.welcomeChannelId}>` : "sin configurar"}\nZona horaria: ${settings?.timezone || "America/Santiago"}`, ephemeral: true });
 }
 
 async function announceMemberChange(member, joined) {
@@ -367,7 +374,8 @@ async function announceBirthdays() {
       const date = localDateParts(settings.timezone);
       const channel = await client.channels.fetch(settings.channelId);
       if (!channel?.isTextBased()) throw new Error("birthday_channel_not_text");
-      const claimed = await claimBirthdayAnnouncements({ guildId: settings.guildId, ...date });
+      const claimed = await claimBirthdayAnnouncements({ guildId: settings.guildId, ...date,
+        isDefaultBirthdayGuild: settings.isDefaultBirthdayGuild });
       if (!claimed.users.length) continue;
       for (const user of claimed.users) {
         try {

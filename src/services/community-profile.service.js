@@ -116,6 +116,23 @@ async function listRecentCommunityActivity(limit = 25) {
   return rows;
 }
 
+async function listBirthdaysForDate(day, month) {
+  const { rows } = await pool.query(
+    `SELECT p.id AS "profileId",
+            COALESCE(NULLIF(p.display_name, ''),
+              (SELECT NULLIF(i.display_name, '') FROM community_identities i
+               WHERE i.profile_id = p.id ORDER BY i.created_at LIMIT 1),
+              'Alguien de la comunidad') AS "displayName"
+     FROM community_profiles p
+     WHERE p.birth_day = $1 AND p.birth_month = $2
+     ORDER BY LOWER(COALESCE(NULLIF(p.display_name, ''),
+       (SELECT i.display_name FROM community_identities i
+        WHERE i.profile_id = p.id ORDER BY i.created_at LIMIT 1), ''))`,
+    [Number(day), Number(month)]
+  );
+  return rows;
+}
+
 async function createCommunityProfile(data = {}) {
   const displayName = String(data.displayName || "").trim().slice(0, 100);
   if (!displayName) throw Object.assign(new Error("invalid_community_profile"), { status: 400 });
@@ -462,4 +479,4 @@ async function mergeCommunityProfiles(rawTargetId, rawSourceId) {
   } finally { client.release(); }
 }
 
-module.exports = { findOrCreateCommunityProfile, createCommunityProfile, searchCommunityProfiles, listRecentCommunityActivity, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity, deleteCommunityIdentity, mergeCommunityProfiles };
+module.exports = { findOrCreateCommunityProfile, createCommunityProfile, searchCommunityProfiles, listRecentCommunityActivity, listBirthdaysForDate, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity, deleteCommunityIdentity, mergeCommunityProfiles };

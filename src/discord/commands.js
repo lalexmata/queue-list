@@ -35,6 +35,8 @@ const commands = [
     .addSubcommand(sub => sub.setName("canal-bienvenida").setDescription("Establece el canal de entradas y salidas")
       .addChannelOption(opt => opt.setName("canal").setDescription("Canal para mensajes de bienvenida y despedida")
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true)))
+    .addSubcommand(sub => sub.setName("servidor-cumpleanos-default").setDescription("Recibe cumpleaños sin servidor asignado")
+      .addBooleanOption(opt => opt.setName("activo").setDescription("Activar este servidor como predeterminado").setRequired(true)))
     .addSubcommand(sub => sub.setName("estado").setDescription("Muestra la configuración del servidor")),
 ].map(command => command.toJSON());
 

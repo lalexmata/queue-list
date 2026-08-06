@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS discord_guild_settings (
   timezone TEXT NOT NULL DEFAULT 'America/Santiago',
   fortnite_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   birthdays_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  is_default_birthday_guild BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -57,3 +58,7 @@ CREATE INDEX IF NOT EXISTS community_profiles_date_idx
 
 CREATE INDEX IF NOT EXISTS community_identities_profile_idx
   ON community_identities (profile_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS discord_guild_settings_one_default_birthday_idx
+  ON discord_guild_settings (is_default_birthday_guild)
+  WHERE is_default_birthday_guild = TRUE;

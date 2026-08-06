@@ -9,6 +9,7 @@
     "start:dev": "nodemon --watch . --ext js,html,css --exec node server.js",
     "migrate:pixelbot": "node scripts/run-migration.js add_pixelbot.sql",
     "migrate:pixelbot-welcome": "node scripts/run-migration.js add_pixelbot_welcome.sql",
+    "migrate:pixelbot-default-birthdays": "node scripts/run-migration.js add_pixelbot_default_birthday_guild.sql",
     "migrate:community-profiles": "node scripts/run-migration.js unify_community_profiles.sql",
     "migrate:community-epic": "node scripts/run-migration.js add_epic_community_identity.sql",
     "migrate:community-aliases": "node scripts/run-migration.js add_community_profile_aliases.sql",

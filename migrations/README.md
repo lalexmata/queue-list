@@ -39,6 +39,9 @@ WHERE table_name = 'queue_items' AND column_name = 'platform';
 Aplica `add_pixelbot.sql` para crear la configuración por servidor de Discord,
 los vínculos con Epic y los cumpleaños.
 
+En instalaciones existentes, aplica `add_pixelbot_default_birthday_guild.sql`
+para permitir un servidor predeterminado para cumpleaños sin destino asignado.
+
 Aplica `add_giveaway_rounds.sql` para separar los cupones por sorteo, conservar
 el historial y registrar múltiples ganadores.
 

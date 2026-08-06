@@ -2,7 +2,7 @@ const express = require("express");
 const { requireIntegrationKey } = require("../../middleware/integrationAuth");
 const { getPlayerStats } = require("../../services/fortnite.service");
 const { getPixelBotStatus, searchDiscordGuildMembers, getDiscordGuildMember } = require("../../discord/pixelbot");
-const { createCommunityProfile, searchCommunityProfiles, listRecentCommunityActivity, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity, deleteCommunityIdentity, mergeCommunityProfiles } = require("../../services/community-profile.service");
+const { createCommunityProfile, searchCommunityProfiles, listRecentCommunityActivity, listBirthdaysForDate, getCommunityProfile, updateCommunityProfile, addCommunityIdentity, updateCommunityIdentity, deleteCommunityIdentity, mergeCommunityProfiles } = require("../../services/community-profile.service");
 const {
   getFortniteAccount, getBirthday, saveBirthday, listBirthdays,
   listGuildSettings,
@@ -60,6 +60,14 @@ router.get("/community/recent-activity", async (req, res) => {
   try {
     const activity = await listRecentCommunityActivity(req.query.limit);
     res.json({ ok: true, count: activity.length, activity });
+  } catch (error) { sendError(res, error); }
+});
+
+router.get("/community/birthdays/today", async (_req, res) => {
+  try {
+    const today = localDateParts("America/Santiago");
+    const birthdays = await listBirthdaysForDate(today.day, today.month);
+    res.json({ ok: true, date: today, count: birthdays.length, birthdays });
   } catch (error) { sendError(res, error); }
 });
 

@@ -47,6 +47,7 @@ No publiques estas claves ni las agregues al repositorio.
 - `/pixelbot canal canal:` (requiere Gestionar servidor)
 - `/pixelbot canal-cumpleanos canal:` configura dónde se publican las felicitaciones.
 - `/pixelbot canal-bienvenida canal:` configura las entradas y salidas del servidor.
+- `/pixelbot servidor-cumpleanos-default activo:` configura el servidor para cumpleaños sin destino asignado.
 - `/pixelbot estado`
 
 PixelBot revisa los cumpleaños cada 15 minutos según la zona horaria configurada
@@ -56,6 +57,7 @@ utiliza el canal general de PixelBot.
 Para perfiles sin cuenta de Discord, asigna al menos una de sus identidades de
 plataforma al servidor desde el panel de comunidad. PixelBot publicará su nombre
 visible en lugar de una mención. Si tiene Discord vinculado, lo mencionará.
+Solo puede existir un servidor predeterminado; al activar otro, el anterior se desactiva.
 
 PixelBot publica una bienvenida cuando entra una persona y una despedida cuando
 abandona el servidor. Ignora cuentas bot. Para habilitarlo, aplica la migración
