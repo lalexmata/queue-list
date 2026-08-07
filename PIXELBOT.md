@@ -165,3 +165,11 @@ x-api-key: TU_INTEGRATION_API_KEY
 Usa `scope=month` para incluir también los cumpleaños que ya pasaron durante el
 mes. Se puede consultar otro mes con `month=1` a `month=12` y cambiar la zona
 horaria con `timezone=America/Santiago`.
+
+### Respuestas para Streamer.bot
+
+Los comandos `!cumple DÍA MES`, `!micumple`, `!cumples` y `!cumplesmes MES`
+reciben siempre una respuesta JSON con `message` y `chatMessage`, tanto si la
+operación resulta exitosa como si falla. Configura la acción de Streamer.bot para
+enviar al chat el valor de `message` (o `chatMessage`), no el cuerpo completo de la
+respuesta. Los errores incluyen el uso correcto y un ejemplo del comando.

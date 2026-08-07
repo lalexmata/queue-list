@@ -189,7 +189,7 @@ function sendBirthdayIntegrationError(res, error, usage) {
   if (code === "birthday_request_failed") console.error("Birthday integration error:", error);
   const explanations = {
     invalid_birthday: "La fecha indicada no es válida.",
-    invalid_birthday_query: "El mes debe ser un número entre 1 y 12.",
+    invalid_birthday_query: "El mes debe ser un número entre 1 y 12 o el nombre del mes.",
     invalid_birthday_platform: "La plataforma indicada no es válida.",
     invalid_birthday_user: "No pude identificar el usuario que ejecutó el comando.",
     invalid_timezone: "La zona horaria configurada no es válida.",
@@ -198,7 +198,12 @@ function sendBirthdayIntegrationError(res, error, usage) {
     birthday_profile_not_found: "No encontré el perfil indicado.",
     birthday_request_failed: "No pude procesar el cumpleaños en este momento.",
   };
-  return res.json({ ok: false, status: "error", error: code, message: `${explanations[code]} ${usage}` });
+  const message = `${explanations[code]} ${usage}`;
+  return res.json({ ok: false, status: "error", error: code, message, chatMessage: message, usage });
+}
+
+function sendBirthdayIntegrationSuccess(res, payload, message) {
+  return res.json({ ok: true, status: "success", ...payload, message, chatMessage: message });
 }
 
 router.put("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
@@ -207,7 +212,8 @@ router.put("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
       ...req.body, platform: req.params.platform, userId: req.params.userId,
       communityId: req.body.communityId || req.query.communityId || "",
     });
-    res.json({ ok: true, birthday, message: `🎂 Cumpleaños de ${birthday.displayName} guardado: ${birthday.day}/${birthday.month}.` });
+    const message = `🎂 Cumpleaños de ${birthday.displayName} guardado: ${birthday.day}/${birthday.month}.`;
+    sendBirthdayIntegrationSuccess(res, { birthday }, message);
   } catch (error) { sendBirthdayIntegrationError(res, error, "Uso correcto: !cumple DÍA MES. Ejemplo: !cumple 25 10 o !cumple 25 octubre."); }
 });
 
@@ -224,7 +230,8 @@ router.get("/birthdays/platforms/:platform/users/:userId/register", async (req, 
       communityId: req.query.communityId || "",
       profileId: req.query.profileId || null,
     });
-    res.json({ ok: true, birthday, message: `🎂 Cumpleaños de ${birthday.displayName} guardado: ${birthday.day}/${birthday.month}.` });
+    const message = `🎂 Cumpleaños de ${birthday.displayName} guardado: ${birthday.day}/${birthday.month}.`;
+    sendBirthdayIntegrationSuccess(res, { birthday }, message);
   } catch (error) { sendBirthdayIntegrationError(res, error, "Uso correcto: !cumple DÍA MES. Ejemplo: !cumple 25 10 o !cumple 25 octubre."); }
 });
 
@@ -234,9 +241,10 @@ router.get("/birthdays/platforms/:platform/users/:userId", async (req, res) => {
       platform: req.params.platform, userId: req.params.userId, communityId: req.query.communityId || "",
     });
     const hasBirthday = birthday?.day != null && birthday?.month != null;
-    res.json({ ok: true, birthday: hasBirthday ? birthday : null, message: hasBirthday
+    const message = hasBirthday
       ? `🎂 El cumpleaños de ${birthday.displayName} es el ${birthday.day}/${birthday.month}.`
-      : `${req.params.userId} no tiene un cumpleaños registrado. Puede guardarlo con !cumple DÍA MES. Ejemplo: !cumple 25 octubre.` });
+      : `${req.params.userId} no tiene un cumpleaños registrado. Puede guardarlo con !cumple DÍA MES. Ejemplo: !cumple 25 octubre.`;
+    sendBirthdayIntegrationSuccess(res, { birthday: hasBirthday ? birthday : null }, message);
   } catch (error) { sendBirthdayIntegrationError(res, error, "Uso correcto: !micumple."); }
 });
 
@@ -252,8 +260,8 @@ router.get("/birthdays/platforms/:platform", async (req, res) => {
       platform: req.params.platform, communityId: req.query.communityId || "",
       month, fromDay: upcoming ? today.day : 1,
     });
-    res.json({ ok: true, month, scope, count: birthdays.length, birthdays,
-      message: platformBirthdayMessage(birthdays, month, upcoming) });
+    const message = platformBirthdayMessage(birthdays, month, upcoming);
+    sendBirthdayIntegrationSuccess(res, { month, scope, count: birthdays.length, birthdays }, message);
   } catch (error) {
     const usage = String(req.query.scope || "upcoming").toLowerCase() === "month"
       ? "Uso correcto: !cumplesmes MES. Ejemplo: !cumplesmes 10 o !cumplesmes octubre."
