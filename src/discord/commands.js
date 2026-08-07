@@ -15,7 +15,9 @@ const commands = [
       .addIntegerOption(opt => opt.setName("mes").setDescription("Mes").setMinValue(1).setMaxValue(12).setRequired(true))
       .addIntegerOption(opt => opt.setName("ano").setDescription("Año opcional y privado").setMinValue(1900).setMaxValue(2100)))
     .addSubcommand(sub => sub.setName("consultar").setDescription("Consulta tu cumpleaños registrado"))
-    .addSubcommand(sub => sub.setName("lista").setDescription("Muestra los cumpleaños del servidor")),
+    .addSubcommand(sub => sub.setName("lista").setDescription("Muestra los cumpleaños del servidor")
+      .addStringOption(opt => opt.setName("mes").setDescription("Número o nombre del mes (ej.: 8 o agosto)"))
+      .addUserOption(opt => opt.setName("persona").setDescription("Muestra el cumpleaños de una persona"))),
   new SlashCommandBuilder().setName("cupones").setDescription("Consulta los cupones del sorteo de Twitch")
     .addSubcommand(sub => sub.setName("vincular").setDescription("Vincula tu usuario de Twitch")
       .addStringOption(opt => opt.setName("usuario").setDescription("Tu nombre de usuario en Twitch").setRequired(true)))

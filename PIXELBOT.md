@@ -40,7 +40,7 @@ No publiques estas claves ni las agregues al repositorio.
 - `/fortnite stats [jugador] [periodo]`
 - `/cumpleanos registrar dia: mes: [ano:]`
 - `/cumpleanos consultar`
-- `/cumpleanos lista`
+- `/cumpleanos lista [mes:] [persona:]` (el mes acepta un número o nombre, por ejemplo `8` o `agosto`; usa solo un filtro)
 - `/cupones vincular usuario:` vincula Discord con los cupones del usuario de Twitch.
 - `/cupones consultar [usuario:]` muestra los cupones cuando el sorteo está activo.
 - `/sorteo estado`, `/sorteo activar` y `/sorteo desactivar` controlan el sorteo.

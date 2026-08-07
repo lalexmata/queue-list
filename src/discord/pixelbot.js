@@ -104,6 +104,18 @@ async function handleFortnite(interaction) {
   }
 }
 
+function parseMonth(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const months = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  const numeric = Number(normalized);
+  if (Number.isInteger(numeric) && numeric >= 1 && numeric <= 12) return numeric;
+  if (normalized === "setiembre") return 9;
+  const monthIndex = months.indexOf(normalized);
+  return monthIndex >= 0 ? monthIndex + 1 : null;
+}
+
 async function handleBirthday(interaction) {
   const sub = interaction.options.getSubcommand();
   if (sub === "registrar") {
@@ -113,8 +125,21 @@ async function handleBirthday(interaction) {
     return interaction.editReply({ content: `Guardé tu cumpleaños: **${birthday.day}/${birthday.month}**.` });
   }
   if (sub === "lista") {
-    const birthdays = await listBirthdays(interaction.guildId);
-    if (!birthdays.length) return interaction.editReply("Todavía no hay cumpleaños registrados en este servidor.");
+    const monthInput = interaction.options.getString("mes");
+    const month = parseMonth(monthInput);
+    const person = interaction.options.getUser("persona");
+    if (monthInput != null && month == null) {
+      return interaction.editReply("El mes no es válido. Usa un número del 1 al 12 o el nombre del mes, por ejemplo `8` o `agosto`.");
+    }
+    if (month != null && person) {
+      return interaction.editReply("Elige solo un filtro: `mes` o `persona`.");
+    }
+    const birthdays = await listBirthdays(interaction.guildId, { month, discordUserId: person?.id });
+    if (!birthdays.length) {
+      if (person) return interaction.editReply(`${person} no tiene un cumpleaños registrado en este servidor.`);
+      if (month != null) return interaction.editReply(`No hay cumpleaños registrados para el mes **${month}**.`);
+      return interaction.editReply("Todavía no hay cumpleaños registrados en este servidor.");
+    }
     const visible = birthdays.slice(0, 50);
     const lines = visible.map(item => {
       const identity = item.discordUserId
@@ -123,7 +148,9 @@ async function handleBirthday(interaction) {
       return `🎂 ${String(item.day).padStart(2, "0")}/${String(item.month).padStart(2, "0")} — ${identity}`;
     });
     if (birthdays.length > visible.length) lines.push(`\n…y ${birthdays.length - visible.length} cumpleaños más.`);
-    const embed = new EmbedBuilder().setColor(0xf472b6).setTitle("🎉 Cumpleaños del servidor")
+    const title = person ? `🎉 Cumpleaños de ${person.displayName || person.username}`
+      : month != null ? `🎉 Cumpleaños del mes ${month}` : "🎉 Cumpleaños del servidor";
+    const embed = new EmbedBuilder().setColor(0xf472b6).setTitle(title)
       .setDescription(lines.join("\n")).setFooter({ text: `${birthdays.length} cumpleaños registrado(s)` });
     return interaction.editReply({ embeds: [embed] });
   }

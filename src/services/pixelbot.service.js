@@ -127,7 +127,11 @@ async function getBirthday(guildId, discordUserId) {
   return getPlatformBirthday({ platform: "discord", userId: discordUserId, communityId: guildId });
 }
 
-async function listBirthdays(guildId) {
+async function listBirthdays(guildId, { month = null, discordUserId = null } = {}) {
+  const normalizedMonth = month == null ? null : Number(month);
+  if (normalizedMonth != null && (!Number.isInteger(normalizedMonth) || normalizedMonth < 1 || normalizedMonth > 12)) {
+    throw Object.assign(new Error("invalid_birthday_month"), { status: 400 });
+  }
   const { rows } = await pool.query(
     `SELECT p.id AS "profileId", p.display_name AS "displayName",
             p.birth_day AS day, p.birth_month AS month,
@@ -142,6 +146,10 @@ async function listBirthdays(guildId) {
                       i.created_at LIMIT 1) AS "identityName"
      FROM community_profiles p
      WHERE p.birth_month IS NOT NULL AND p.birth_day IS NOT NULL
+       AND ($2::integer IS NULL OR p.birth_month = $2)
+       AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM community_identities selected
+                                        WHERE selected.profile_id = p.id AND selected.platform = 'discord'
+                                          AND selected.community_id = $1 AND selected.platform_user_id = $3))
        AND (EXISTS (SELECT 1 FROM community_identities member
                     WHERE member.profile_id = p.id AND member.community_id = $1)
             OR (EXISTS (SELECT 1 FROM discord_guild_settings settings
@@ -149,7 +157,7 @@ async function listBirthdays(guildId) {
                 AND NOT EXISTS (SELECT 1 FROM community_identities assigned
                                 WHERE assigned.profile_id = p.id AND assigned.community_id <> '')))
      ORDER BY p.birth_month, p.birth_day, LOWER(COALESCE(p.display_name, ''))`,
-    [String(guildId)]
+    [String(guildId), normalizedMonth, discordUserId == null ? null : String(discordUserId)]
   );
   return rows;
 }
