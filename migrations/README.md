@@ -45,6 +45,9 @@ para permitir un servidor predeterminado para cumpleaños sin destino asignado.
 Aplica `add_giveaway_rounds.sql` para separar los cupones por sorteo, conservar
 el historial y registrar múltiples ganadores.
 
+Aplica `add_giveaway_stream_events.sql` para habilitar los cupones automáticos
+por bits recibidos desde Streamer.bot.
+
 Deberías ver:
 ```
  column_name | data_type | column_default 

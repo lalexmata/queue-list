@@ -173,3 +173,45 @@ reciben siempre una respuesta JSON con `message` y `chatMessage`, tanto si la
 operación resulta exitosa como si falla. Configura la acción de Streamer.bot para
 enviar al chat el valor de `message` (o `chatMessage`), no el cuerpo completo de la
 respuesta. Los errores incluyen el uso correcto y un ejemplo del comando.
+
+### Eventos de sorteo desde Streamer.bot
+
+Con un sorteo activo, Streamer.bot puede registrar eventos mediante GET o POST:
+
+```text
+/api/giveaway-coupons/events/subscription?username=USUARIO&displayName=NOMBRE&tier=1
+/api/giveaway-coupons/events/gifted-subs?username=USUARIO&displayName=NOMBRE&count=5
+/api/giveaway-coupons/events/bits?username=USUARIO&displayName=NOMBRE&bits=500
+```
+
+Una suscripción entrega entre 1 y 3 cupones según el tier, y cada sub regalada entrega
+un cupón al usuario que la regaló, sin límite de cinco. Por ejemplo, 20 subs regaladas
+entregan 20 cupones. Los bits se acumulan por persona dentro del sorteo y cada bloque
+completo de 100 entrega un cupón; el sobrante se conserva para el siguiente bloque.
+La respuesta siempre contiene `message` y `chatMessage` listos para publicar.
+Incluye el identificador único de Streamer.bot como `eventId` para que un reintento
+del mismo evento no vuelva a sumar cupones.
+
+Los endpoints también aceptan directamente las variables normalizadas por el C# de
+la cola: `queueUser`, `queueNick` y `queuePlatform`. Para estos eventos conviene que
+el C# agregue `queueEventId`, `queueSubTier`, `queueGiftCount` y `queueBits`.
+
+Si no existe un sorteo activo, el evento usa el borrador más reciente. Si tampoco
+hay un borrador, crea automáticamente uno llamado `Próximo sorteo`; de esta manera
+las suscripciones, subs regaladas y bits no se pierden antes de activar el sorteo.
+
+Para responder cuando alguien escriba la palabra completa `sorteo` o `sortear`, crea
+en Streamer.bot un comando en modo `Regex` con la expresión
+`(?i)\b(?:sorteo|sortear)\b`, fuente `Twitch Message` y las opciones para ignorar
+la cuenta del bot y mensajes internos. Asocia a la acción el trigger
+`Core > Commands > Command Triggered`; no uses el trigger general de cada mensaje.
+Luego usa:
+
+```text
+/api/giveaway-coupons/chat/giveaway-status?queueUser=USUARIO&queueNick=NOMBRE&queuePlatform=twitch&queueMessage=MENSAJE
+```
+
+El endpoint solo considera sorteos con estado `active`; un borrador no se anuncia
+como activo. Si `matched` es `false`, Streamer.bot no debe publicar ninguna respuesta.
+Para el texto usa la variable oficial `%rawInputUrlEncoded%` del trigger como valor
+de `queueMessage`.

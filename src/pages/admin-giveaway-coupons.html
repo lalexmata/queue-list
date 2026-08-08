@@ -195,6 +195,7 @@
             <option value="channel_points">Puntos del canal</option>
             <option value="subscriber">Suscriptor</option>
             <option value="gifted_subs">Subs regaladas</option>
+            <option value="bits">Bits</option>
             <option value="purchase">Compra con código</option>
           </select>
         </label>
@@ -237,6 +238,7 @@
               <option value="subscriber">Suscripción</option>
               <option value="channel_points">Puntos del canal</option>
               <option value="gifted_subs">Subs regaladas</option>
+              <option value="bits">Bits</option>
               <option value="purchase">Compra con código</option>
             </select>
           </label>
@@ -296,6 +298,11 @@
           <small>Acumulativo.</small>
         </label>
         <label>
+          Bits
+          <input id="editBits" type="number" min="0" max="1000000" required>
+          <small>Un cupón por cada 100 bits.</small>
+        </label>
+        <label>
           Compras con código
           <input id="editPurchases" type="number" min="0" max="1000000" required>
           <small>Un cupón por compra, sin límite.</small>
@@ -351,6 +358,7 @@
       channel_points: ["Puntos", "channelPointsCount"],
       subscriber: ["Suscripción", "subscriberCount"],
       gifted_subs: ["Subs regaladas", "giftedSubsCount"],
+      bits: ["Bits", "bitsCount"],
       purchase: ["Compras", "purchaseCount"],
     };
     let currentParticipants = [];
@@ -550,6 +558,7 @@
       document.getElementById("editChannelPoints").value = Number(participant.channelPointsCount || 0);
       document.getElementById("editSubscriber").value = Number(participant.subscriberCount || 0);
       document.getElementById("editGiftedSubs").value = Number(participant.giftedSubsCount || 0);
+      document.getElementById("editBits").value = Number(participant.bitsCount || 0);
       document.getElementById("editPurchases").value = Number(participant.purchaseCount || 0);
       couponEditorStatus.textContent = "";
       couponEditorStatus.classList.remove("error");
@@ -570,6 +579,7 @@
             channel_points: Number(document.getElementById("editChannelPoints").value),
             subscriber: Number(document.getElementById("editSubscriber").value),
             gifted_subs: Number(document.getElementById("editGiftedSubs").value),
+            bits: Number(document.getElementById("editBits").value),
             purchase: Number(document.getElementById("editPurchases").value),
           }),
         });

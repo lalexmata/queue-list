@@ -1,13 +1,14 @@
 const { pool } = require("../database/db");
 const { findOrCreateCommunityProfile } = require("./community-profile.service");
 
-const SOURCES = ["channel_points", "subscriber", "gifted_subs", "purchase"];
+const SOURCES = ["channel_points", "subscriber", "gifted_subs", "bits", "purchase"];
 const PARTICIPANT_COLUMNS = `
   p.id, p.profile_id AS "profileId", p.giveaway_id AS "giveawayId", p.username, p.display_name AS "displayName", p.platform,
   COALESCE(SUM(s.coupon_count), 0)::int AS "couponCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'channel_points'), 0)::int AS "channelPointsCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'subscriber'), 0)::int AS "subscriberCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'gifted_subs'), 0)::int AS "giftedSubsCount",
+  COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'bits'), 0)::int AS "bitsCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'purchase'), 0)::int AS "purchaseCount",
   p.created_at AS "createdAt", p.updated_at AS "updatedAt"`;
 
@@ -19,6 +20,7 @@ function cleanSource(value) {
   const aliases = {
     points: "channel_points", channel: "channel_points", sub: "subscriber",
     subscription: "subscriber", gifted: "gifted_subs", gifted_subscriptions: "gifted_subs",
+    bit: "bits", cheers: "bits", cheer: "bits",
     compra: "purchase", purchases: "purchase",
   };
   const raw = String(value || "").trim().toLowerCase();
@@ -65,6 +67,30 @@ async function getActiveGiveawayId(db = pool) {
   const { rows } = await db.query(`SELECT id FROM giveaways WHERE status = 'active' ORDER BY id DESC LIMIT 1`);
   if (!rows[0]) throw fail("no_active_giveaway", 409);
   return rows[0].id;
+}
+
+async function getActiveGiveaway(db = pool) {
+  const { rows } = await db.query(
+    `SELECT id, name, draw_at AS "drawAt", winner_count AS "winnerCount", status
+     FROM giveaways WHERE status = 'active' ORDER BY id DESC LIMIT 1`
+  );
+  return rows[0] || null;
+}
+
+async function getOrCreateStreamerGiveaway(db) {
+  await db.query("SELECT pg_advisory_xact_lock(hashtext('giveaway_stream_events'))");
+  const { rows } = await db.query(
+    `SELECT id, status FROM giveaways
+     WHERE status IN ('active', 'draft')
+     ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, created_at DESC, id DESC
+     LIMIT 1`
+  );
+  if (rows[0]) return rows[0];
+  const created = await db.query(
+    `INSERT INTO giveaways (name, winner_count, status)
+     VALUES ('Próximo sorteo', 1, 'draft') RETURNING id, status`
+  );
+  return created.rows[0];
 }
 
 async function listParticipants(giveawayId = null) {
@@ -116,9 +142,9 @@ async function setGiveawayActive(isActive) {
   return rows[0];
 }
 
-async function upsertCoupons(db, rawParticipant) {
+async function upsertCoupons(db, rawParticipant, selectedGiveawayId = null) {
   const item = normalizeParticipant(rawParticipant);
-  const giveawayId = await getActiveGiveawayId(db);
+  const giveawayId = selectedGiveawayId || await getActiveGiveawayId(db);
   const profileId = await findOrCreateCommunityProfile(db, {
     platform: item.platform, userId: item.username, displayName: item.displayName,
   });
@@ -201,6 +227,87 @@ async function inTransaction(work) {
 
 async function addCoupons(participant) {
   return inTransaction(client => upsertCoupons(client, participant));
+}
+
+async function addCouponsForEvent(participant, event = {}) {
+  const eventId = String(event.eventId || "").trim().slice(0, 200);
+  const eventType = String(event.eventType || "").trim();
+  const amount = validateCouponCount(event.amount);
+  return inTransaction(async client => {
+    const normalized = normalizeParticipant({
+      ...participant,
+      couponCount: eventType === "bits" ? 1 : participant.couponCount,
+    });
+    if (eventId) {
+      const { rows: existing } = await client.query(
+        `SELECT participant_id AS "participantId" FROM giveaway_stream_events
+         WHERE event_type = $1 AND event_id = $2`,
+        [eventType, eventId]
+      );
+      if (existing[0]) {
+        return {
+          participant: existing[0].participantId ? await getParticipant(client, existing[0].participantId) : null,
+          duplicate: true,
+        };
+      }
+    }
+    const giveaway = await getOrCreateStreamerGiveaway(client);
+    let streamEventId = null;
+    if (eventId) {
+      const { rows } = await client.query(
+        `INSERT INTO giveaway_stream_events (giveaway_id, event_id, event_type, username, amount)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (event_type, event_id) DO NOTHING
+         RETURNING id`,
+        [giveaway.id, eventId, eventType, normalized.username, amount]
+      );
+      if (!rows[0]) {
+        const { rows: existing } = await client.query(
+          `SELECT participant_id AS "participantId" FROM giveaway_stream_events
+           WHERE event_type = $1 AND event_id = $2`,
+          [eventType, eventId]
+        );
+        return {
+          participant: existing[0]?.participantId ? await getParticipant(client, existing[0].participantId) : null,
+          duplicate: true,
+        };
+      }
+      streamEventId = rows[0].id;
+    }
+
+    let couponCountAdded = normalized.couponCount;
+    let totalBits = null;
+    let remainingBits = null;
+    if (eventType === "bits") {
+      const { rows: balances } = await client.query(
+        `SELECT total_bits AS "totalBits" FROM giveaway_stream_bit_balances
+         WHERE giveaway_id = $1 AND platform = $2 AND username = $3 FOR UPDATE`,
+        [giveaway.id, normalized.platform, normalized.username]
+      );
+      const previousTotal = Number(balances[0]?.totalBits || 0);
+      totalBits = previousTotal + amount;
+      couponCountAdded = Math.floor(totalBits / 100) - Math.floor(previousTotal / 100);
+      remainingBits = totalBits % 100;
+      await client.query(
+        `INSERT INTO giveaway_stream_bit_balances (giveaway_id, platform, username, total_bits)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (giveaway_id, platform, username) DO UPDATE
+         SET total_bits = EXCLUDED.total_bits, updated_at = NOW()`,
+        [giveaway.id, normalized.platform, normalized.username, totalBits]
+      );
+    }
+
+    const savedParticipant = couponCountAdded > 0
+      ? await upsertCoupons(client, { ...normalized, couponCount: couponCountAdded }, giveaway.id)
+      : null;
+    if (streamEventId && savedParticipant) {
+      await client.query("UPDATE giveaway_stream_events SET participant_id = $2 WHERE id = $1", [streamEventId, savedParticipant.id]);
+    }
+    return {
+      participant: savedParticipant, duplicate: false, giveawayStatus: giveaway.status,
+      couponCountAdded, totalBits, remainingBits,
+    };
+  });
 }
 
 async function addBulkCoupons(participants) {
@@ -297,6 +404,7 @@ async function updateSettings(value) {
 }
 
 module.exports = {
-  addCoupons, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, removeParticipant,
-  setDisplayName, setSourceCount, setSourceCounts, updateSettings, setGiveawayActive, getActiveGiveawayId,
+  addCoupons, addCouponsForEvent, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, removeParticipant,
+  setDisplayName, setSourceCount, setSourceCounts, updateSettings, setGiveawayActive,
+  getActiveGiveawayId, getActiveGiveaway,
 };

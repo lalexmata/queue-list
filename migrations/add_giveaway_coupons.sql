@@ -31,7 +31,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS giveaway_participants_platform_username_idx
 
 CREATE TABLE IF NOT EXISTS giveaway_coupon_sources (
   participant_id BIGINT NOT NULL REFERENCES giveaway_participants(id) ON DELETE CASCADE,
-  source TEXT NOT NULL CHECK (source IN ('channel_points', 'subscriber', 'gifted_subs', 'purchase')),
+  source TEXT NOT NULL CHECK (source IN ('channel_points', 'subscriber', 'gifted_subs', 'bits', 'purchase')),
   coupon_count INTEGER NOT NULL DEFAULT 0 CHECK (coupon_count >= 0),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (participant_id, source)

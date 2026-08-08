@@ -16,6 +16,7 @@
     "migrate:pixelbot-messages": "node scripts/run-migration.js add_pixelbot_scheduled_messages.sql",
     "migrate:pixelbot-giveaway": "node scripts/run-migration.js add_pixelbot_giveaway.sql",
     "migrate:giveaway-rounds": "node scripts/run-migration.js add_giveaway_rounds.sql",
+    "migrate:giveaway-stream-events": "node scripts/run-migration.js add_giveaway_stream_events.sql",
     "discord:register": "node scripts/register-discord-commands.js",
     "healthcheck": "curl -f http://localhost:${PORT:-8080}/health || exit 1"
   },
