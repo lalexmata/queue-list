@@ -56,6 +56,16 @@ function subscriptionCoupons(value) {
   return 1;
 }
 
+function giveawayDateMessage(drawAt) {
+  if (!drawAt) return "su fecha aún está por confirmar";
+  const date = new Date(drawAt);
+  if (Number.isNaN(date.getTime())) return "su fecha aún está por confirmar";
+  const formatted = new Intl.DateTimeFormat("es-CL", {
+    day: "numeric", month: "long", year: "numeric", timeZone: "America/Santiago",
+  }).format(date);
+  return `se realizará el ${formatted}`;
+}
+
 async function recordStreamerEvent(req, res, eventType) {
   try {
     const { source, username, displayName, platform } = streamerEventData(req);
@@ -226,7 +236,8 @@ router.all("/chat/giveaway-status", async (req, res) => {
     } else {
       const participant = username ? await findParticipantByUsername(username, platform) : null;
       couponCount = Number(participant?.couponCount || 0);
-      message = `🎟️ El sorteo ${giveaway.name} está activo. @${displayName || username} tienes ${couponCount} cupón${couponCount === 1 ? "" : "es"}.`;
+      message = `🎟️ El sorteo ${giveaway.name} está activo y ${giveawayDateMessage(giveaway.drawAt)}. `
+        + `@${displayName || username} tienes ${couponCount} cupón${couponCount === 1 ? "" : "es"}.`;
     }
     return res.json({
       ok: true, matched: true, keyword: matchedKeyword, active: Boolean(giveaway),

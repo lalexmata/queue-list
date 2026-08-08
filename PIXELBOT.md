@@ -215,3 +215,5 @@ El endpoint solo considera sorteos con estado `active`; un borrador no se anunci
 como activo. Si `matched` es `false`, Streamer.bot no debe publicar ninguna respuesta.
 Para el texto usa la variable oficial `%rawInputUrlEncoded%` del trigger como valor
 de `queueMessage`.
+Cuando hay un sorteo activo, la respuesta incluye su fecha sin mostrar la hora, en
+la zona `America/Santiago`. Si no tiene fecha configurada, indica que está por confirmar.
