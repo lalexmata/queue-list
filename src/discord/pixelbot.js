@@ -1,7 +1,9 @@
 const { Client, Events, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const { getPlayerStats } = require("../services/fortnite.service");
 const { renderFortniteStatsCard } = require("../services/fortnite-card.service");
-const { findParticipantByUsername, getActiveGiveawayId } = require("../services/giveawayCoupons.service");
+const {
+  findParticipantByUsername, getActiveGiveawayId, getActiveGiveaway, giveawayDateMessage,
+} = require("../services/giveawayCoupons.service");
 const { getLatestGiveawayWithWinners } = require("../services/giveawayRounds.service");
 const { cleanMessage, claimDueMessages, finishScheduledMessage } = require("../services/pixelbot-messages.service");
 const {
@@ -289,13 +291,15 @@ async function handleGiveaway(interaction) {
   if (sub === "estado") {
     const settings = await getGuildSettings(interaction.guildId);
     if (!settings?.giveawayActive) return interaction.reply("En este momento no hay un sorteo activo en este servidor.");
-    try {
-      await getActiveGiveawayId();
-      return interaction.reply("🎉 Hay un sorteo activo en este servidor.");
-    } catch (error) {
-      if (error.message === "no_active_giveaway") return interaction.reply("En este momento no hay un sorteo activo.");
-      throw error;
-    }
+    const giveaway = await getActiveGiveaway();
+    if (!giveaway) return interaction.reply("En este momento no hay un sorteo activo.");
+    const linked = await getCouponAccount(interaction.guildId, interaction.user.id);
+    const participant = linked ? await findParticipantByUsername(linked.twitchUsername, "twitch") : null;
+    const couponCount = Number(participant?.couponCount || 0);
+    const couponMessage = linked
+      ? `<@${interaction.user.id}> tienes **${couponCount} cupón${couponCount === 1 ? "" : "es"}**.`
+      : "Usa `/cupones vincular` con tu usuario de Twitch para consultar tus cupones.";
+    return interaction.reply(`🎟️ El sorteo **${giveaway.name}** está activo y ${giveawayDateMessage(giveaway.drawAt)}. ${couponMessage}`);
   }
   if (sub === "ganadores") {
     await interaction.deferReply();

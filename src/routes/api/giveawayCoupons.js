@@ -1,7 +1,7 @@
 const express = require("express");
 const {
   addCoupons, addCouponsForEvent, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, removeParticipant,
-  setDisplayName, setSourceCount, setSourceCounts, updateSettings, getActiveGiveawayId, getActiveGiveaway,
+  setDisplayName, setSourceCount, setSourceCounts, updateSettings, getActiveGiveawayId, getActiveGiveaway, giveawayDateMessage,
 } = require("../../services/giveawayCoupons.service");
 const { listGuildSettings, updateGuildSettings } = require("../../services/pixelbot.service");
 
@@ -54,16 +54,6 @@ function subscriptionCoupons(value) {
   if (["3000", "3"].includes(normalized)) return 3;
   if (["2000", "2"].includes(normalized)) return 2;
   return 1;
-}
-
-function giveawayDateMessage(drawAt) {
-  if (!drawAt) return "su fecha aún está por confirmar";
-  const date = new Date(drawAt);
-  if (Number.isNaN(date.getTime())) return "su fecha aún está por confirmar";
-  const formatted = new Intl.DateTimeFormat("es-CL", {
-    day: "numeric", month: "long", year: "numeric", timeZone: "America/Santiago",
-  }).format(date);
-  return `se realizará el ${formatted}`;
 }
 
 async function recordStreamerEvent(req, res, eventType) {

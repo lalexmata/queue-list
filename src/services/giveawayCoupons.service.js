@@ -77,6 +77,16 @@ async function getActiveGiveaway(db = pool) {
   return rows[0] || null;
 }
 
+function giveawayDateMessage(drawAt) {
+  if (!drawAt) return "su fecha aún está por confirmar";
+  const date = new Date(drawAt);
+  if (Number.isNaN(date.getTime())) return "su fecha aún está por confirmar";
+  const formatted = new Intl.DateTimeFormat("es-CL", {
+    day: "numeric", month: "long", year: "numeric", timeZone: "America/Santiago",
+  }).format(date);
+  return `se realizará el ${formatted}`;
+}
+
 async function getOrCreateStreamerGiveaway(db) {
   await db.query("SELECT pg_advisory_xact_lock(hashtext('giveaway_stream_events'))");
   const { rows } = await db.query(
@@ -406,5 +416,5 @@ async function updateSettings(value) {
 module.exports = {
   addCoupons, addCouponsForEvent, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, removeParticipant,
   setDisplayName, setSourceCount, setSourceCounts, updateSettings, setGiveawayActive,
-  getActiveGiveawayId, getActiveGiveaway,
+  getActiveGiveawayId, getActiveGiveaway, giveawayDateMessage,
 };
