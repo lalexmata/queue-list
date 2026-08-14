@@ -34,6 +34,8 @@
     .playing { color:var(--brandA); font-size:11px; font-weight:900; margin-bottom:3px; }
     .empty { color:var(--muted); padding:24px 0; text-align:center; }
     .status { min-height:18px; margin-top:10px; font-size:12px; color:var(--muted); } .status.error { color:#fca5a5; }
+    .diagnostics { margin-top:10px; color:var(--muted); font-size:12px; } .diagnostics summary { cursor:pointer; }
+    .diagnostics ul { margin:8px 0 0; padding-left:20px; } .diagnostics li { margin:4px 0; overflow-wrap:anywhere; }
     a { color:#fff; text-decoration:none; }
     @media (max-width:780px) {
       body.app-bg { padding:12px; }
@@ -101,6 +103,7 @@
           <label class="volume-control" for="volume"><span>🔊 Volumen</span><input id="volume" type="range" min="0" max="100" step="1" value="100"><strong id="volume-value">100%</strong></label>
         </div>
         <div class="status" id="status"></div>
+        <details class="diagnostics" id="diagnostics" hidden><summary>Diagnóstico del reproductor</summary><ul id="diagnostic-list"></ul></details>
       </section>
       <section class="card">
         <h2 id="queue-title">Solicitudes</h2><ul class="queue" id="queue"></ul><div class="empty" id="empty">No hay canciones solicitadas.</div>
@@ -111,6 +114,7 @@
   <script>
     const queueEl=document.getElementById('queue'), emptyEl=document.getElementById('empty');
     const nowEl=document.getElementById('now'), statusEl=document.getElementById('status');
+    const diagnosticsEl=document.getElementById('diagnostics'), diagnosticListEl=document.getElementById('diagnostic-list');
     const placeholderEl=document.getElementById('placeholder');
     const requestForm=document.getElementById('request-form'), youtubeUrlEl=document.getElementById('youtube-url');
     const playlistForm=document.getElementById('playlist-form'), playlistUrlEl=document.getElementById('playlist-url');
@@ -118,8 +122,49 @@
     let player=null, playerReady=false, currentVideoId=null, currentSong=null, loadingNext=false, manuallyPaused=false;
     let reordering=false, draggedRow=null, pointerRow=null;
     let fallbackPlaylistId=null, fallbackActive=false, fallbackIndex=0;
+    let playerErrorRetries=0;
+    const youtubeErrorReasons={
+      2:'ID o parámetro de video no válido',
+      5:'error transitorio del reproductor HTML5',
+      100:'video eliminado o privado',
+      101:'el propietario no permite reproducirlo fuera de YouTube',
+      150:'el propietario no permite reproducirlo fuera de YouTube',
+      153:'YouTube no recibió una identidad de cliente o Referer válido'
+    };
     function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
     function setStatus(message,error=false){statusEl.textContent=message;statusEl.classList.toggle('error',error);}
+    function addDiagnostic(message){
+      diagnosticsEl.hidden=false;diagnosticsEl.open=true;
+      const item=document.createElement('li');item.textContent=`${new Date().toLocaleTimeString()} — ${message}`;
+      diagnosticListEl.prepend(item);while(diagnosticListEl.children.length>20)diagnosticListEl.lastElementChild.remove();
+    }
+    function reportPlayerError(details){
+      console.warn('YouTube player error',details);
+      fetch('/api/song-request/player-event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(details),keepalive:true})
+        .catch(error=>console.warn('No se pudo registrar el error del reproductor:',error));
+    }
+    function handlePlayerError(event){
+      const code=Number(event.data), reason=youtubeErrorReasons[code]||'error desconocido de YouTube';
+      const videoId=player?.getVideoData?.().video_id||currentVideoId||null;
+      const playlistIndex=fallbackActive?player?.getPlaylistIndex?.():-1;
+      const retried=code===5&&playerErrorRetries<1;
+      const details={code,reason,context:fallbackActive?'fallback':'request',videoId,songId:currentSong?.id||null,title:currentSong?.title||null,playerState:player?.getPlayerState?.(),retried};
+      reportPlayerError(details);
+      addDiagnostic(`${currentSong?.title||videoId||'Video de respaldo'}: ${reason} (código ${code})${retried?' — reintentando una vez':''}.`);
+      if(retried){
+        playerErrorRetries+=1;setStatus(`YouTube informó un ${reason}. Reintentando…`,true);
+        setTimeout(()=>{
+          if(!playerReady)return;
+          if(fallbackActive&&playlistIndex>=0)player.playVideoAt(playlistIndex);
+          else if(videoId&&currentVideoId===videoId)player.loadVideoById(videoId);
+        },1500);
+        return;
+      }
+      playerErrorRetries=0;
+      if(fallbackActive){setStatus(`Video de respaldo omitido: ${reason} (código ${code}).`,true);player.nextVideo();return;}
+      setStatus(`“${currentSong?.title||'La canción'}” fue omitida: ${reason} (código ${code}).`,true);
+      playNext('skipped');
+    }
     async function api(path,options={}){
       const response=await fetch(path,{cache:'no-store',...options});
       const data=await response.json().catch(()=>({}));
@@ -131,12 +176,13 @@
       player=new YT.Player('player',{width:'100%',height:'100%',playerVars:{autoplay:1,controls:1,rel:0},events:{
         onReady:()=>{playerReady=true;syncPlaybackState().then(loadQueue);},
         onStateChange:event=>{
+          if(event.data===YT.PlayerState.PLAYING)playerErrorRetries=0;
           if(event.data===YT.PlayerState.ENDED&&!fallbackActive)playNext('played');
           if(event.data===YT.PlayerState.PAUSED&&!manuallyPaused&&(currentSong||fallbackActive)){
             setTimeout(()=>{if(playerReady&&!manuallyPaused)player.playVideo();},250);
           }
         },
-        onError:()=>{if(fallbackActive){player.nextVideo();return;}setStatus('YouTube no pudo reproducir este video. Saltando…',true);playNext('skipped');}
+        onError:handlePlayerError
       }});
     };
 
@@ -181,9 +227,10 @@
       placeholderEl.style.display='none';
       nowEl.innerHTML='<strong>Playlist de respaldo</strong><span class="muted">No hay solicitudes pendientes.</span>';
       player.loadPlaylist({list:fallbackPlaylistId,listType:'playlist',index:fallbackIndex,startSeconds:0});
+      player.setShuffle(true);
       player.setLoop(true);
       if(manuallyPaused)setTimeout(()=>player.pauseVideo(),250);
-      setStatus('Reproduciendo la playlist de respaldo.');
+      setStatus('Reproduciendo la playlist de respaldo en orden aleatorio.');
     }
 
     function showCurrent(song){
@@ -191,7 +238,7 @@
       if(!song){currentVideoId=null;nowEl.innerHTML='<span class="muted">No hay una canción reproduciéndose.</span>';placeholderEl.style.display='grid';return;}
       nowEl.innerHTML=`<strong>${esc(song.title)}</strong><span class="muted">Solicitada por ${esc(song.requesterDisplayName)}</span>`;
       placeholderEl.style.display='none';
-      if(playerReady&&song.youtubeId!==currentVideoId){currentVideoId=song.youtubeId;player.loadVideoById(song.youtubeId);if(manuallyPaused)setTimeout(()=>player.pauseVideo(),250);}
+      if(playerReady&&song.youtubeId!==currentVideoId){playerErrorRetries=0;currentVideoId=song.youtubeId;player.loadVideoById(song.youtubeId);if(manuallyPaused)setTimeout(()=>player.pauseVideo(),250);}
     }
 
     function renderQueue(items){

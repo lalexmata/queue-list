@@ -125,6 +125,27 @@ router.get("/playback", async (_req, res) => {
   }
 });
 
+// YouTube IFrame errors originate in the browser. Mirror them to the server so
+// they remain available in deployment logs after the player advances.
+router.post("/player-event", (req, res) => {
+  const source = req.body || {};
+  const event = {
+    event: "youtube_player_error",
+    occurredAt: new Date().toISOString(),
+    code: Number.isInteger(Number(source.code)) ? Number(source.code) : null,
+    reason: String(source.reason || "unknown").slice(0, 160),
+    context: source.context === "fallback" ? "fallback" : "request",
+    videoId: String(source.videoId || "").slice(0, 32) || null,
+    songId: /^\d+$/.test(String(source.songId || "")) ? String(source.songId) : null,
+    title: String(source.title || "").slice(0, 200) || null,
+    playerState: Number.isFinite(Number(source.playerState)) ? Number(source.playerState) : null,
+    retried: source.retried === true,
+    userAgent: String(req.get("user-agent") || "").slice(0, 300),
+  };
+  console.warn(JSON.stringify(event));
+  res.status(202).json({ ok: true });
+});
+
 router.all("/pause", async (_req, res) => {
   try {
     await setPlaybackPaused(true);
