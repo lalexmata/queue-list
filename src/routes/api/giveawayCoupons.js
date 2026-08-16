@@ -78,14 +78,19 @@ async function recordStreamerEvent(req, res, eventType) {
       couponCount = Math.floor(eventAmount / 100);
       couponSource = "bits";
     }
-    const eventId = source.queueEventId || source.eventId || source.event_id || source.messageId || null;
+    const rawEventId = source.queueEventId || source.eventId || source.event_id || source.messageId || null;
+    // Some Streamer.bot actions have been configured with a comma after the placeholder.
+    const eventId = rawEventId ? String(rawEventId).replace(/,+$/, "") : null;
     const result = await addCouponsForEvent(
       { username, displayName, platform, couponCount, source: couponSource },
       { eventId, eventType: eventType === "gifted-subs" ? "gifted_subs" : eventType, amount: eventAmount }
     );
     const participant = result.participant;
     if (result.duplicate) {
-      const message = "Este evento ya había sido procesado; no se agregaron cupones duplicados.";
+      const participantName = participant?.displayName || displayName || username;
+      const message = eventType === "subscription"
+        ? `@${String(participantName).replace(/^@+/, "")}, ya tienes activo tu cupón de suscriptor.`
+        : "Este evento ya había sido procesado; no se agregaron cupones duplicados.";
       return res.json({ ok: true, accepted: true, duplicate: true, couponCountAdded: 0, participant, message, chatMessage: message });
     }
     couponCount = result.couponCountAdded;
@@ -116,12 +121,21 @@ async function recordStreamerEvent(req, res, eventType) {
 }
 
 function logStreamerEventResponse(req, res, next) {
+  const startedAt = Date.now();
+  const request = { ...req.query, ...(req.body || {}) };
+  console.log("Streamer event request:", JSON.stringify({
+    method: req.method,
+    path: req.originalUrl?.split("?")[0] || req.path,
+    request,
+  }));
   const sendJson = res.json.bind(res);
   res.json = body => {
     console.log("Streamer event response:", JSON.stringify({
       method: req.method,
       path: req.originalUrl?.split("?")[0] || req.path,
       status: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      eventId: request.queueEventId || request.eventId || request.event_id || request.messageId || null,
       response: body,
     }));
     return sendJson(body);
