@@ -116,6 +116,24 @@ async function listParticipants(giveawayId = null) {
   return rows;
 }
 
+async function listBitBalances(giveawayId = null) {
+  const selectedGiveawayId = giveawayId || await getActiveGiveawayId();
+  const { rows } = await pool.query(
+    `SELECT b.username, b.platform, COALESCE(p.display_name, b.username) AS "displayName",
+            b.total_bits::int AS "totalBits",
+            FLOOR(b.total_bits / 100.0)::int AS "earnedCoupons",
+            MOD(b.total_bits, 100)::int AS "remainingBits",
+            b.updated_at AS "updatedAt"
+     FROM giveaway_stream_bit_balances b
+     LEFT JOIN giveaway_participants p ON p.giveaway_id = b.giveaway_id
+       AND LOWER(p.platform) = LOWER(b.platform) AND LOWER(p.username) = LOWER(b.username)
+     WHERE b.giveaway_id = $1
+     ORDER BY b.total_bits DESC, LOWER(b.username)`,
+    [selectedGiveawayId]
+  );
+  return rows;
+}
+
 async function findParticipantByUsername(rawUsername, rawPlatform = "twitch") {
   const username = String(rawUsername || "").trim().replace(/^@+/, "").toLowerCase();
   if (!username || username.length > 100 || !/^[a-z0-9_]+$/i.test(username)) throw fail("invalid_username");
@@ -414,7 +432,7 @@ async function updateSettings(value) {
 }
 
 module.exports = {
-  addCoupons, addCouponsForEvent, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, removeParticipant,
+  addCoupons, addCouponsForEvent, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, listBitBalances, removeParticipant,
   setDisplayName, setSourceCount, setSourceCounts, updateSettings, setGiveawayActive,
   getActiveGiveawayId, getActiveGiveaway, giveawayDateMessage,
 };

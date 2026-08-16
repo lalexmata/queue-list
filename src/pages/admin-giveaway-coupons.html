@@ -186,8 +186,9 @@
           </select>
         </label>
         <label class="coupon-field">
-          Cantidad
+          <span id="quantityLabel">Cantidad de cupones</span>
           <input id="couponCount" name="couponCount" type="number" min="1" max="1000000" value="1" required>
+          <small id="quantityHelp">La cantidad se suma a los cupones actuales.</small>
         </label>
         <label>
           Origen
@@ -202,6 +203,14 @@
         <button class="btn btn-primary" id="submitButton" type="submit">Agregar</button>
       </form>
       <div class="status" id="formStatus" role="status"></div>
+    </section>
+
+    <section class="card form-card">
+      <h2>Bits acumulados</h2>
+      <p>Total recibido por usuario y saldo disponible para alcanzar el próximo bloque de 100 bits.</p>
+      <ul class="participants" id="bitBalances"></ul>
+      <div class="empty" id="emptyBitBalances">Todavía no hay bits registrados.</div>
+      <div class="status" id="bitBalanceStatus" role="status"></div>
     </section>
 
     <section class="card bulk-card">
@@ -341,6 +350,9 @@
     const formStatusEl = document.getElementById("formStatus");
     const formEl = document.getElementById("participantForm");
     const submitButton = document.getElementById("submitButton");
+    const bitBalancesEl = document.getElementById("bitBalances");
+    const emptyBitBalancesEl = document.getElementById("emptyBitBalances");
+    const bitBalanceStatusEl = document.getElementById("bitBalanceStatus");
     const bulkFormEl = document.getElementById("bulkForm");
     const bulkFileEl = document.getElementById("bulkFile");
     const bulkTextEl = document.getElementById("bulkText");
@@ -371,6 +383,13 @@
       const input = document.getElementById(countId);
       input.max = source === "subscriber" ? 3 : 1000000;
       if (Number(input.value) > Number(input.max)) input.value = input.max;
+      if (sourceId === "couponSource") {
+        const isBits = source === "bits";
+        document.getElementById("quantityLabel").textContent = isBits ? "Cantidad de bits" : "Cantidad de cupones";
+        document.getElementById("quantityHelp").textContent = isBits
+          ? "Cada 100 bits genera un cupón y el sobrante queda acumulado."
+          : "La cantidad se suma a los cupones actuales.";
+      }
     }
 
     document.getElementById("couponSource").addEventListener("change", () => {
@@ -551,6 +570,37 @@
       }
     }
 
+    async function loadBitBalances() {
+      bitBalanceStatusEl.textContent = "Cargando…";
+      bitBalanceStatusEl.classList.remove("error");
+      try {
+        const data = await request("/api/giveaway-coupons/bit-balances");
+        const balances = data.balances || [];
+        bitBalancesEl.innerHTML = balances.map(balance => {
+          const platform = platformInfo[balance.platform] || platformInfo.other;
+          return `<li class="participant">
+            <div class="participant-main">
+              <span class="avatar">${escapeHtml(initials(balance.displayName))}</span>
+              <div class="identity">
+                <strong>${escapeHtml(balance.displayName)}</strong>
+                <span>@${escapeHtml(balance.username)} · ${platform[0]} ${escapeHtml(platform[1])}</span>
+              </div>
+            </div>
+            <div class="source-breakdown">
+              <span class="source-chip">Total: ${Number(balance.totalBits)} bits</span>
+              <span class="source-chip">Cupones obtenidos: ${Number(balance.earnedCoupons)}</span>
+              <span class="source-chip">Saldo: ${Number(balance.remainingBits)}/100</span>
+            </div>
+          </li>`;
+        }).join("");
+        emptyBitBalancesEl.style.display = balances.length ? "none" : "block";
+        bitBalanceStatusEl.textContent = balances.length ? `${balances.length} usuario(s) con bits registrados` : "";
+      } catch (error) {
+        bitBalanceStatusEl.textContent = error.message;
+        bitBalanceStatusEl.classList.add("error");
+      }
+    }
+
     function openCouponEditor(participant) {
       editingParticipant = participant;
       document.getElementById("couponEditorParticipant").textContent =
@@ -584,7 +634,7 @@
           }),
         });
         couponDialog.close();
-        await loadParticipants();
+        await Promise.all([loadParticipants(), loadBitBalances()]);
       } catch (error) {
         couponEditorStatus.textContent = error.message;
         couponEditorStatus.classList.add("error");
@@ -643,16 +693,28 @@
         const platform = document.getElementById("platform").value;
         const couponCount = Number(document.getElementById("couponCount").value);
         const couponSource = document.getElementById("couponSource").value;
-        const data = await request("/api/giveaway-coupons/redeem", {
-          method: "POST",
-          body: JSON.stringify({ username, displayName: username.replace(/^@/, ""), platform, couponCount, couponSource }),
-        });
+        const displayName = username.replace(/^@/, "");
+        const data = couponSource === "bits"
+          ? await request("/api/giveaway-coupons/events/bits", {
+              method: "POST",
+              body: JSON.stringify({
+                queueUser: username,
+                queueNick: displayName,
+                queuePlatform: platform,
+                queueBits: couponCount,
+                queueEventId: `manual-bits-${crypto.randomUUID()}`,
+              }),
+            })
+          : await request("/api/giveaway-coupons/redeem", {
+              method: "POST",
+              body: JSON.stringify({ username, displayName, platform, couponCount, couponSource }),
+            });
         formStatusEl.textContent = data.message;
         formEl.reset();
         document.getElementById("couponCount").value = 1;
         updateCouponCountLimit("couponSource", "couponCount");
         document.getElementById("username").focus();
-        await loadParticipants();
+        await Promise.all([loadParticipants(), loadBitBalances()]);
       } catch (error) {
         formStatusEl.classList.add("error");
         formStatusEl.textContent = error.message;
@@ -728,7 +790,7 @@
       buttons.forEach(button => { button.disabled = true; });
       listStatusEl.textContent = "Actualizando…";
       try {
-        await Promise.all([loadSettings(), loadParticipants()]);
+        await Promise.all([loadSettings(), loadParticipants(), loadBitBalances()]);
       } finally {
         buttons.forEach(button => { button.disabled = false; });
       }
@@ -872,6 +934,7 @@
     loadSettings();
     loadDiscordGiveawaySettings();
     loadParticipants();
+    loadBitBalances();
   </script>
 </body>
 </html>

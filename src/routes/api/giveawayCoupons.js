@@ -1,6 +1,6 @@
 const express = require("express");
 const {
-  addCoupons, addCouponsForEvent, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, removeParticipant,
+  addCoupons, addCouponsForEvent, addBulkCoupons, findParticipantByUsername, getSettings, listParticipants, listBitBalances, removeParticipant,
   setDisplayName, setSourceCount, setSourceCounts, updateSettings, getActiveGiveawayId, getActiveGiveaway, giveawayDateMessage,
 } = require("../../services/giveawayCoupons.service");
 const { listGuildSettings, updateGuildSettings } = require("../../services/pixelbot.service");
@@ -90,7 +90,7 @@ async function recordStreamerEvent(req, res, eventType) {
     }
     couponCount = result.couponCountAdded;
     if (eventType === "bits" && couponCount === 0) {
-      const message = `${displayName || username} acumuló ${result.remainingBits} de 100 bits para su próximo cupón.`;
+      const message = `¡Gracias por apoyar, ${displayName || username}! Acumulaste ${result.remainingBits} de 100 bits para tu próximo cupón.`;
       return res.json({
         ok: true, accepted: true, duplicate: false, giveawayStatus: result.giveawayStatus,
         couponCountAdded: 0, totalBits: result.totalBits, remainingBits: result.remainingBits,
@@ -98,7 +98,7 @@ async function recordStreamerEvent(req, res, eventType) {
       });
     }
     const message = eventType === "bits"
-      ? `${participant.displayName} recibió ${couponCount} cupón(es). Conserva ${result.remainingBits} bit(s) para el próximo.`
+      ? `¡Gracias por apoyar, ${participant.displayName}! Recibiste ${couponCount} cupón(es) y conservas ${result.remainingBits} bit(s) para el próximo.`
       : `${participant.displayName} recibió ${couponCount} cupón(es) por ${eventType === "gifted-subs" ? "subs regaladas" : "su suscripción"}.`;
     const finalMessage = result.giveawayStatus === "draft" ? `${message} Quedaron guardados en el próximo sorteo.` : message;
     return res.status(req.method === "GET" ? 200 : 201).json({
@@ -115,6 +115,20 @@ async function recordStreamerEvent(req, res, eventType) {
   }
 }
 
+function logStreamerEventResponse(req, res, next) {
+  const sendJson = res.json.bind(res);
+  res.json = body => {
+    console.log("Streamer event response:", JSON.stringify({
+      method: req.method,
+      path: req.originalUrl?.split("?")[0] || req.path,
+      status: res.statusCode,
+      response: body,
+    }));
+    return sendJson(body);
+  };
+  next();
+}
+
 router.get("/", async (req, res) => {
   try {
     const participants = await listParticipants(req.query.giveawayId || null);
@@ -128,6 +142,15 @@ router.get("/", async (req, res) => {
 router.get("/settings", async (_req, res) => {
   try {
     res.json({ ok: true, settings: await getSettings() });
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+router.get("/bit-balances", async (req, res) => {
+  try {
+    const balances = await listBitBalances(req.query.giveawayId || null);
+    res.json({ ok: true, balances });
   } catch (error) {
     sendError(res, error);
   }
@@ -269,9 +292,9 @@ router.all("/redeem", async (req, res) => {
 });
 
 // Integraciones GET/POST para eventos de Twitch capturados por Streamer.bot.
-router.all("/events/subscription", (req, res) => recordStreamerEvent(req, res, "subscription"));
-router.all("/events/gifted-subs", (req, res) => recordStreamerEvent(req, res, "gifted-subs"));
-router.all("/events/bits", (req, res) => recordStreamerEvent(req, res, "bits"));
+router.all("/events/subscription", logStreamerEventResponse, (req, res) => recordStreamerEvent(req, res, "subscription"));
+router.all("/events/gifted-subs", logStreamerEventResponse, (req, res) => recordStreamerEvent(req, res, "gifted-subs"));
+router.all("/events/bits", logStreamerEventResponse, (req, res) => recordStreamerEvent(req, res, "bits"));
 
 router.post("/bulk", async (req, res) => {
   try {
