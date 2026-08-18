@@ -16,6 +16,9 @@ const {
 
 let client;
 const mentionCooldowns = new Map();
+const BIRTHDAY_CHECK_TIMEZONE = process.env.BIRTHDAY_CHECK_TIMEZONE || "America/Santiago";
+const BIRTHDAY_CHECK_HOURS = [0, 8];
+let lastBirthdayCheckSlot = null;
 
 function pixelBotEnabled() {
   return !["0", "false", "no", "off"].includes(String(process.env.PIXELBOT_ENABLED ?? "true").trim().toLowerCase());
@@ -403,6 +406,28 @@ function localDateParts(timeZone) {
   return { year: Number(values.year), month: Number(values.month), day: Number(values.day) };
 }
 
+function localDateTimeParts(timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  return Object.fromEntries(parts.map(part => [part.type, part.value]));
+}
+
+async function runDailyBirthdayCheck() {
+  const now = localDateTimeParts(BIRTHDAY_CHECK_TIMEZONE);
+  const hour = Number(now.hour);
+  const slot = `${now.year}-${now.month}-${now.day}:${String(hour).padStart(2, "0")}`;
+  if (!BIRTHDAY_CHECK_HOURS.includes(hour) || lastBirthdayCheckSlot === slot) return;
+  lastBirthdayCheckSlot = slot;
+  try {
+    await announceBirthdays();
+  } catch (error) {
+    lastBirthdayCheckSlot = null;
+    throw error;
+  }
+}
+
 async function announceBirthdays() {
   if (!client?.isReady()) return;
   const guilds = await listBirthdayGuilds();
@@ -472,9 +497,9 @@ async function startPixelBot() {
   client.once(Events.ClientReady, async ready => {
     console.log(`✅ PixelBot connected as ${ready.user.tag}`);
     await syncDiscordIdentityNames();
-    await announceBirthdays();
     await processScheduledMessages();
-    setInterval(() => announceBirthdays().catch(console.error), 15 * 60 * 1000).unref();
+    await runDailyBirthdayCheck();
+    setInterval(() => runDailyBirthdayCheck().catch(console.error), 60 * 1000).unref();
     setInterval(() => processScheduledMessages().catch(error => console.error(JSON.stringify({ event: "pixelbot_scheduler_error", error: error.message }))), 30 * 1000).unref();
   });
   client.on(Events.GuildCreate, guild => ensureGuild({ guildId: guild.id, guildName: guild.name }).catch(console.error));
