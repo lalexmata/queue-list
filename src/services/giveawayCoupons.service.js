@@ -143,10 +143,53 @@ async function findParticipantByUsername(rawUsername, rawPlatform = "twitch") {
   }
   const giveawayId = await getActiveGiveawayId();
   const { rows } = await pool.query(
-    `SELECT ${PARTICIPANT_COLUMNS}
-     FROM giveaway_participants p LEFT JOIN giveaway_coupon_sources s ON s.participant_id = p.id
-     WHERE LOWER(p.username) = $1 AND LOWER(p.platform) = $2 AND p.giveaway_id = $3
-     GROUP BY p.id`,
+    `WITH requested_profile AS (
+       SELECT profile.id AS profile_id
+       FROM community_profiles profile
+       LEFT JOIN community_identities identity ON identity.profile_id = profile.id
+       LEFT JOIN community_profile_aliases alias ON alias.profile_id = profile.id
+       WHERE LOWER(profile.display_name) = $1
+          OR LOWER(identity.platform_user_id) = $1
+          OR LOWER(identity.display_name) = $1
+          OR LOWER(alias.alias) = $1
+       GROUP BY profile.id
+       ORDER BY MIN(CASE
+                  WHEN LOWER(identity.platform) = $2 AND LOWER(identity.platform_user_id) = $1 THEN 0
+                  WHEN LOWER(identity.platform_user_id) = $1 THEN 1
+                  WHEN LOWER(identity.display_name) = $1 THEN 2
+                  WHEN LOWER(profile.display_name) = $1 THEN 3
+                  ELSE 4
+                END), profile.id
+       LIMIT 1
+     ), matching_participants AS (
+       SELECT p.*
+       FROM giveaway_participants p
+       WHERE p.giveaway_id = $3
+         AND (
+           (LOWER(p.username) = $1 AND LOWER(p.platform) = $2)
+           OR (p.profile_id IS NOT NULL AND p.profile_id = (SELECT profile_id FROM requested_profile))
+         )
+     ), preferred_participant AS (
+       SELECT p.*
+       FROM matching_participants p
+       ORDER BY CASE WHEN LOWER(p.username) = $1 AND LOWER(p.platform) = $2 THEN 0 ELSE 1 END,
+                p.updated_at DESC, p.id
+       LIMIT 1
+     )
+     SELECT p.id, p.profile_id AS "profileId", p.giveaway_id AS "giveawayId",
+            p.username, p.display_name AS "displayName", p.platform,
+            COALESCE(SUM(s.coupon_count), 0)::int AS "couponCount",
+            COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'channel_points'), 0)::int AS "channelPointsCount",
+            COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'subscriber'), 0)::int AS "subscriberCount",
+            COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'gifted_subs'), 0)::int AS "giftedSubsCount",
+            COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'bits'), 0)::int AS "bitsCount",
+            COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'purchase'), 0)::int AS "purchaseCount",
+            p.created_at AS "createdAt", p.updated_at AS "updatedAt"
+     FROM preferred_participant p
+     JOIN matching_participants linked ON linked.profile_id = p.profile_id OR linked.id = p.id
+     LEFT JOIN giveaway_coupon_sources s ON s.participant_id = linked.id
+     GROUP BY p.id, p.profile_id, p.giveaway_id, p.username, p.display_name, p.platform,
+              p.created_at, p.updated_at`,
     [username, platform, giveawayId]
   );
   return rows[0] || null;
