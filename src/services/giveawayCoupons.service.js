@@ -77,6 +77,16 @@ async function getActiveGiveaway(db = pool) {
   return rows[0] || null;
 }
 
+async function getEditableGiveaway(db, giveawayId) {
+  if (!/^\d+$/.test(String(giveawayId || ""))) throw fail("invalid_giveaway_id");
+  const { rows } = await db.query(
+    `SELECT id, status FROM giveaways WHERE id = $1 AND status IN ('active', 'draft')`,
+    [giveawayId]
+  );
+  if (!rows[0]) throw fail("giveaway_not_editable", 409);
+  return rows[0];
+}
+
 function giveawayDateMessage(drawAt) {
   if (!drawAt) return "su fecha aún está por confirmar";
   const date = new Date(drawAt);
@@ -296,8 +306,11 @@ async function inTransaction(work) {
   }
 }
 
-async function addCoupons(participant) {
-  return inTransaction(client => upsertCoupons(client, participant));
+async function addCoupons(participant, giveawayId = null) {
+  return inTransaction(async client => {
+    const selectedId = giveawayId ? (await getEditableGiveaway(client, giveawayId)).id : null;
+    return upsertCoupons(client, participant, selectedId);
+  });
 }
 
 async function addCouponsForEvent(participant, event = {}) {

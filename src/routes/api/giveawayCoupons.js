@@ -18,6 +18,8 @@ function sendError(res, error) {
     invalid_coupon_count: "La cantidad de cupones debe ser un número entero válido.",
     invalid_coupon_source: "Selecciona un origen de cupón válido.",
     invalid_display_name: "Ingresa un nombre visible válido.",
+    invalid_giveaway_id: "Selecciona un sorteo válido.",
+    giveaway_not_editable: "Solo se pueden agregar cupones a sorteos activos o en borrador.",
     participant_not_found: "No se encontró al participante.",
     subscriber_coupon_limit: "Los cupones de suscripción deben estar entre 0 y 3, según el tier.",
     channel_points_limit_reached: "La cantidad supera el límite de canjes con puntos configurado.",
@@ -286,7 +288,7 @@ router.all("/redeem", async (req, res) => {
       platform: source.platform || "twitch",
       couponCount: source.couponCount ?? source.coupons ?? source.amount ?? 1,
       source: source.couponSource || source.origin || source.couponOrigin || "channel_points",
-    });
+    }, source.giveawayId);
     res.status(req.method === "GET" ? 200 : 201).json({
       ok: true,
       accepted: true,

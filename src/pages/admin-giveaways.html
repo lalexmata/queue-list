@@ -102,9 +102,44 @@
     </form>
   </dialog>
 
+  <dialog id="couponDialog">
+    <form id="couponForm">
+      <h2 id="couponTitle">Agregar cupones al borrador</h2>
+      <p class="muted">Los cupones se guardarán en este borrador sin activarlo.</p>
+      <div class="modal-form">
+        <label>
+          Usuario de Twitch
+          <input id="couponUsername" maxlength="100" autocomplete="off" list="couponUsernameSuggestions" placeholder="Escribe al menos 2 letras" required>
+          <datalist id="couponUsernameSuggestions"></datalist>
+          <span class="muted" id="couponUsernameStatus">Busca por usuario o nombre visible.</span>
+        </label>
+        <label>Nombre visible<input id="couponDisplayName" maxlength="100" placeholder="Opcional"></label>
+        <label>
+          Origen
+          <select id="couponSource" required>
+            <option value="gifted_subs">Subs regaladas</option>
+            <option value="subscriber">Suscripción</option>
+            <option value="channel_points">Puntos del canal</option>
+            <option value="purchase">Compra con código</option>
+          </select>
+        </label>
+        <label>Cantidad de cupones<input id="couponCount" type="number" min="1" max="1000000" value="1" required></label>
+        <div class="status" id="couponStatus"></div>
+        <div class="modal-actions">
+          <button class="btn" id="cancelCoupons" type="button">Cancelar</button>
+          <button class="btn btn-primary" id="saveCoupons" type="submit">Agregar cupones</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
   <script>
     let giveaways = [];
     let editingGiveawayId = null;
+    let couponGiveawayId = null;
+    let couponUsernameSuggestions = [];
+    let couponUsernameTimer = null;
+    let couponUsernameSequence = 0;
     const statusEl = document.getElementById("status");
 
     function esc(value) { const div=document.createElement("div"); div.textContent=String(value??""); return div.innerHTML; }
@@ -126,6 +161,7 @@
             <div><h3>${esc(item.name)}</h3><div class="meta"><span class="badge ${item.status}">${statusText(item.status)}</span><span>📅 ${dateText(item.drawAt)}</span><span>👥 ${item.participantCount}</span><span>🎟️ ${item.couponCount}</span><span>🏆 ${item.winnerCount}</span></div></div>
             <div class="actions">
               ${item.status !== "finished" ? `<button class="btn" onclick="editGiveaway('${item.id}')">Editar</button>` : ""}
+              ${item.status === "draft" ? `<button class="btn" onclick="openDraftCoupons('${item.id}')">Agregar cupones</button>` : ""}
               ${item.status === "draft" ? `<button class="btn btn-primary" onclick="activateGiveaway('${item.id}')">Activar</button>` : ""}
               ${item.status === "active" ? `<button class="btn" onclick="finishGiveaway('${item.id}')">Finalizar</button>` : ""}
               <button class="btn" onclick="openWinners('${item.id}')">Ganadores</button>
@@ -193,6 +229,106 @@
       editingGiveawayId = null;
     });
     document.getElementById("editDialog").addEventListener("close", () => { editingGiveawayId = null; });
+
+    function openDraftCoupons(id) {
+      const item = giveaways.find(g => String(g.id) === String(id));
+      if (!item || item.status !== "draft") return;
+      couponGiveawayId = id;
+      document.getElementById("couponTitle").textContent = `Agregar cupones · ${item.name}`;
+      document.getElementById("couponForm").reset();
+      document.getElementById("couponCount").value = 1;
+      document.getElementById("couponStatus").textContent = "";
+      document.getElementById("couponUsernameSuggestions").innerHTML = "";
+      document.getElementById("couponUsernameStatus").textContent = "Busca por usuario o nombre visible.";
+      couponUsernameSuggestions = [];
+      document.getElementById("couponDialog").showModal();
+      document.getElementById("couponUsername").focus();
+    }
+
+    async function searchCouponUsers() {
+      const input = document.getElementById("couponUsername");
+      const query = input.value.trim().replace(/^@+/, "");
+      const searchStatus = document.getElementById("couponUsernameStatus");
+      const sequence = ++couponUsernameSequence;
+      couponUsernameSuggestions = [];
+      document.getElementById("couponUsernameSuggestions").innerHTML = "";
+      if (query.length < 2) {
+        searchStatus.textContent = "Busca por usuario o nombre visible.";
+        return;
+      }
+      searchStatus.textContent = "Buscando…";
+      try {
+        const data = await request(`/api/pixelbot/community/profiles?q=${encodeURIComponent(query)}&limit=20`);
+        if (sequence !== couponUsernameSequence) return;
+        couponUsernameSuggestions = (data.profiles || []).flatMap(profile => {
+          const identity = (profile.identities || []).find(item => item.platform === "twitch");
+          return identity ? [{
+            username: identity.userId,
+            displayName: identity.displayName || profile.displayName || identity.userId,
+          }] : [];
+        });
+        document.getElementById("couponUsernameSuggestions").innerHTML = couponUsernameSuggestions.map(item =>
+          `<option value="${esc(item.username)}">${esc(item.displayName)} · Twitch</option>`
+        ).join("");
+        searchStatus.textContent = couponUsernameSuggestions.length
+          ? `${couponUsernameSuggestions.length} cuenta(s) encontrada(s).`
+          : "No encontramos coincidencias; puedes escribir el usuario manualmente.";
+      } catch (error) {
+        if (sequence === couponUsernameSequence) searchStatus.textContent = error.message;
+      }
+    }
+
+    document.getElementById("couponUsername").addEventListener("input", () => {
+      clearTimeout(couponUsernameTimer);
+      couponUsernameTimer = setTimeout(searchCouponUsers, 250);
+    });
+    document.getElementById("couponUsername").addEventListener("change", event => {
+      const username = event.target.value.trim().replace(/^@+/, "").toLowerCase();
+      const selected = couponUsernameSuggestions.find(item => item.username.toLowerCase() === username);
+      if (!selected) return;
+      document.getElementById("couponDisplayName").value = selected.displayName;
+      document.getElementById("couponUsernameStatus").textContent = `${selected.displayName} · Twitch`;
+    });
+
+    document.getElementById("couponForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!couponGiveawayId) return;
+      const saveButton = document.getElementById("saveCoupons");
+      const couponStatus = document.getElementById("couponStatus");
+      const username = document.getElementById("couponUsername").value.trim().replace(/^@+/, "");
+      const displayName = document.getElementById("couponDisplayName").value.trim() || username;
+      saveButton.disabled = true;
+      couponStatus.textContent = "Guardando…";
+      try {
+        const data = await request("/api/giveaway-coupons/redeem", {
+          method: "POST",
+          body: JSON.stringify({
+            giveawayId: couponGiveawayId,
+            username,
+            displayName,
+            platform: "twitch",
+            couponSource: document.getElementById("couponSource").value,
+            couponCount: Number(document.getElementById("couponCount").value),
+          }),
+        });
+        couponStatus.textContent = data.message;
+        document.getElementById("couponUsername").value = "";
+        document.getElementById("couponDisplayName").value = "";
+        document.getElementById("couponCount").value = 1;
+        document.getElementById("couponUsernameSuggestions").innerHTML = "";
+        document.getElementById("couponUsernameStatus").textContent = "Busca por usuario o nombre visible.";
+        couponUsernameSuggestions = [];
+        await load();
+        document.getElementById("couponUsername").focus();
+      } catch (error) {
+        couponStatus.textContent = error.message;
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+    document.getElementById("cancelCoupons").addEventListener("click", () => document.getElementById("couponDialog").close());
+    document.getElementById("couponDialog").addEventListener("close", () => { couponGiveawayId = null; });
+
     async function activateGiveaway(id) { if(!confirm("¿Activar este sorteo?"))return; try{await request(`/api/giveaways/${id}/activate`,{method:"POST"});await load();}catch(e){alert(e.message);} }
     async function finishGiveaway(id) { if(!confirm("¿Finalizar el sorteo? Los cupones quedarán archivados."))return; try{await request(`/api/giveaways/${id}/finish`,{method:"POST"});await load();}catch(e){alert(e.message);} }
 
