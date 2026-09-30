@@ -94,6 +94,15 @@ async function activateGiveaway(id) {
   }
 }
 
+async function pauseGiveaway(id) {
+  const { rows } = await pool.query(
+    `UPDATE giveaways SET status = 'draft', updated_at = NOW()
+     WHERE id = $1 AND status = 'active' RETURNING id`, [id]
+  );
+  if (!rows[0]) throw fail("giveaway_not_active", 409);
+  return getGiveaway(id);
+}
+
 async function finishGiveaway(id) {
   const { rows } = await pool.query(
     `UPDATE giveaways SET status = 'finished', finished_at = NOW(), updated_at = NOW()
@@ -127,4 +136,4 @@ async function removeWinner(giveawayId, winnerId) {
   return getGiveaway(giveawayId);
 }
 
-module.exports = { listGiveaways, getGiveaway, getLatestGiveawayWithWinners, createGiveaway, updateGiveaway, activateGiveaway, finishGiveaway, setWinner, removeWinner };
+module.exports = { listGiveaways, getGiveaway, getLatestGiveawayWithWinners, createGiveaway, updateGiveaway, activateGiveaway, pauseGiveaway, finishGiveaway, setWinner, removeWinner };

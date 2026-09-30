@@ -1,6 +1,6 @@
 const express = require("express");
 const {
-  listGiveaways, createGiveaway, updateGiveaway, activateGiveaway, finishGiveaway, setWinner, removeWinner,
+  listGiveaways, createGiveaway, updateGiveaway, activateGiveaway, pauseGiveaway, finishGiveaway, setWinner, removeWinner,
 } = require("../../services/giveawayRounds.service");
 
 const router = express.Router();
@@ -8,7 +8,7 @@ const router = express.Router();
 function sendError(res, error) {
   const messages = {
     invalid_giveaway_name: "Escribe un nombre para el sorteo.", invalid_winner_count: "La cantidad de ganadores debe estar entre 1 y 100.",
-    invalid_draw_date: "La fecha del sorteo no es válida.", active_giveaway_exists: "Finaliza el sorteo activo antes de activar otro.",
+    invalid_draw_date: "La fecha del sorteo no es válida.", active_giveaway_exists: "Finaliza o devuelve a borrador el sorteo activo antes de activar otro.",
     giveaway_not_draft: "Solo se puede activar un sorteo en borrador.", giveaway_not_active: "El sorteo no está activo.",
     giveaway_not_editable: "Un sorteo finalizado no se puede editar.", invalid_winner_position: "La posición del ganador no es válida.",
     winner_position_exceeds_limit: "La posición supera la cantidad de ganadores configurada.", participant_not_found: "No se encontró el participante.",
@@ -28,6 +28,9 @@ router.put("/:id", async (req, res) => {
 });
 router.post("/:id/activate", async (req, res) => {
   try { res.json({ ok: true, giveaway: await activateGiveaway(req.params.id) }); } catch (error) { sendError(res, error); }
+});
+router.post("/:id/pause", async (req, res) => {
+  try { res.json({ ok: true, giveaway: await pauseGiveaway(req.params.id) }); } catch (error) { sendError(res, error); }
 });
 router.post("/:id/finish", async (req, res) => {
   try { res.json({ ok: true, giveaway: await finishGiveaway(req.params.id) }); } catch (error) { sendError(res, error); }

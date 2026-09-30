@@ -9,6 +9,7 @@
     body.app-bg { min-height:100vh; height:auto; }
     .wrap { width:100%; max-width:980px; position:relative; z-index:1; }
     .header, .form-grid, .actions, .giveaway-head, .meta { display:flex; gap:12px; align-items:center; }
+    .actions { flex-wrap:wrap; }
     .header { justify-content:space-between; flex-wrap:wrap; margin-bottom:16px; }
     h1, h2, h3, p { margin:0; }
     h1 { font-size:24px; } h2 { font-size:18px; }
@@ -51,7 +52,7 @@
 
     <section class="card">
       <h2>Crear nuevo sorteo</h2>
-      <p class="muted">Se crea como borrador. Actívalo cuando hayas finalizado el sorteo anterior.</p>
+      <p class="muted">Se crea como borrador. Actívalo cuando hayas finalizado o devuelto a borrador el sorteo anterior.</p>
       <form id="createForm" class="form-grid">
         <label>Nombre<input id="name" maxlength="120" placeholder="Sorteo de agosto" required></label>
         <label>Fecha y hora<input id="drawAt" type="datetime-local"></label>
@@ -163,6 +164,7 @@
               ${item.status !== "finished" ? `<button class="btn" onclick="editGiveaway('${item.id}')">Editar</button>` : ""}
               ${item.status === "draft" ? `<button class="btn" onclick="openDraftCoupons('${item.id}')">Agregar cupones</button>` : ""}
               ${item.status === "draft" ? `<button class="btn btn-primary" onclick="activateGiveaway('${item.id}')">Activar</button>` : ""}
+              ${item.status === "active" ? `<button class="btn" onclick="pauseGiveaway('${item.id}', this)">Volver a borrador</button>` : ""}
               ${item.status === "active" ? `<button class="btn" onclick="finishGiveaway('${item.id}')">Finalizar</button>` : ""}
               <button class="btn" onclick="openWinners('${item.id}')">Ganadores</button>
             </div>
@@ -330,6 +332,19 @@
     document.getElementById("couponDialog").addEventListener("close", () => { couponGiveawayId = null; });
 
     async function activateGiveaway(id) { if(!confirm("¿Activar este sorteo?"))return; try{await request(`/api/giveaways/${id}/activate`,{method:"POST"});await load();}catch(e){alert(e.message);} }
+    async function pauseGiveaway(id, button) {
+      if (!confirm("¿Pausar este sorteo y volver a borrador? Se conservarán los participantes y cupones. Podrás activarlo nuevamente cuando quieras.")) return;
+      button.disabled = true;
+      try {
+        await request(`/api/giveaways/${id}/pause`, {method:"POST"});
+        statusEl.textContent = "Sorteo pausado y guardado como borrador. Se conservaron los participantes y cupones.";
+        await load();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        button.disabled = false;
+      }
+    }
     async function finishGiveaway(id) { if(!confirm("¿Finalizar el sorteo? Los cupones quedarán archivados."))return; try{await request(`/api/giveaways/${id}/finish`,{method:"POST"});await load();}catch(e){alert(e.message);} }
 
     async function openWinners(id) {
