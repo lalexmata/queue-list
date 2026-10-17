@@ -227,13 +227,28 @@ async function listPixelBotChannels(guildId) {
     .sort((a, b) => a.position - b.position || a.channelName.localeCompare(b.channelName));
 }
 
+async function searchPixelBotMentions(guildId, query) {
+  const term = String(query || "").trim().replace(/^@/, "");
+  if (term.length < 2) return [];
+  if (!client?.isReady()) throw Object.assign(new Error("pixelbot_not_connected"), { status: 503 });
+  const guild = client.guilds.cache.get(String(guildId)) || await client.guilds.fetch(String(guildId));
+  const [members, roles] = await Promise.all([
+    searchDiscordGuildMembers(guildId, term), guild.roles.fetch(),
+  ]);
+  return [
+    ...members.map(member => ({ label: `${member.displayName} (@${member.username})`, mention: `<@${member.userId}>`, type: "Usuario" })),
+    ...[...roles.values()].filter(role => role.id !== guild.id && role.name.toLowerCase().includes(term.toLowerCase()))
+      .slice(0, 25).map(role => ({ label: role.name, mention: `<@&${role.id}>`, type: "Rol" })),
+  ];
+}
+
 async function sendPixelBotMessage({ guildId, channelId, content }) {
   if (!client?.isReady()) throw Object.assign(new Error("pixelbot_not_connected"), { status: 503 });
   const channel = await client.channels.fetch(String(channelId));
   if (!channel?.isTextBased() || channel.guildId !== String(guildId) || !channel.isSendable()) {
     throw Object.assign(new Error("invalid_pixelbot_channel"), { status: 400 });
   }
-  const message = await channel.send({ content: cleanMessage(content), allowedMentions: { parse: [] } });
+  const message = await channel.send({ content: cleanMessage(content), allowedMentions: { parse: ["users", "roles", "everyone"] } });
   return { messageId: message.id, channelId: channel.id, sentAt: message.createdAt };
 }
 
@@ -458,7 +473,11 @@ async function announceBirthdays() {
 }
 
 async function handleMention(message) {
-  if (!client?.user || !message.guildId || message.author.bot || !message.mentions.has(client.user)) return;
+  if (!client?.user || !message.guildId || message.author.bot || !message.mentions.has(client.user, {
+    ignoreRoles: true,
+    ignoreEveryone: true,
+    ignoreRepliedUser: true,
+  })) return;
   const key = `${message.guildId}:${message.author.id}`;
   const now = Date.now();
   if (now - (mentionCooldowns.get(key) || 0) < 10_000) return;
@@ -552,4 +571,4 @@ async function startPixelBot() {
 }
 
 module.exports = { startPixelBot, getPixelBotStatus, searchDiscordGuildMembers, getDiscordGuildMember,
-  listPixelBotChannels, sendPixelBotMessage, sendWelcomeTest };
+  listPixelBotChannels, searchPixelBotMentions, sendPixelBotMessage, sendWelcomeTest };
