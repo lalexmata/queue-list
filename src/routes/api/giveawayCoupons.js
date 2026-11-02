@@ -215,7 +215,7 @@ router.get("/user/:username", async (req, res) => {
         platform: req.query.platform || "twitch",
         couponCount: 0,
         message: "En este momento no hay un sorteo activo.",
-        sources: { channelPoints: 0, subscriber: 0, giftedSubs: 0, bits: 0, purchases: 0 },
+        sources: { channelPoints: 0, subscriber: 0, subscriberSum: 0, giftedSubs: 0, bits: 0, purchases: 0 },
       });
     }
     const username = String(req.params.username || "").replace(/^@+/, "").toLowerCase();
@@ -234,6 +234,7 @@ router.get("/user/:username", async (req, res) => {
       sources: {
         channelPoints: Number(participant?.channelPointsCount || 0),
         subscriber: Number(participant?.subscriberCount || 0),
+        subscriberSum: Number(participant?.subscriberSumCount || 0),
         giftedSubs: Number(participant?.giftedSubsCount || 0),
         bits: Number(participant?.bitsCount || 0),
         purchases: Number(participant?.purchaseCount || 0),

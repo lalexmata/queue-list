@@ -54,3 +54,11 @@ Deberías ver:
 -------------+-----------+----------------
  platform    | varchar   | 'unknown'
 ```
+
+## Cupones por suma de subs
+
+Ejecuta `npm run migrate:giveaway-sub-sum` antes de usar el nuevo origen
+`subscriber_sum` (Suma de subs). Cada asignación suma 1, 2 o 3 cupones según
+el nivel; el total se conserva y puede superar 3. Suscriptor mantiene su
+comportamiento actual. En CSV se respeta el nivel de cada fila y las filas
+repetidas suman renovaciones; volver a importar la lista vuelve a sumarlas.

@@ -197,6 +197,7 @@
           <select id="couponSource" required>
             <option value="channel_points">Puntos del canal</option>
             <option value="subscriber">Suscriptor</option>
+            <option value="subscriber_sum">Suma de subs</option>
             <option value="gifted_subs">Subs regaladas</option>
             <option value="bits">Bits</option>
             <option value="purchase">Compra con código</option>
@@ -247,6 +248,7 @@
             Origen
             <select id="bulkCouponSource" required>
               <option value="subscriber">Suscripción</option>
+            <option value="subscriber_sum">Suma de subs</option>
               <option value="channel_points">Puntos del canal</option>
               <option value="gifted_subs">Subs regaladas</option>
               <option value="bits">Bits</option>
@@ -303,6 +305,11 @@
           Suscripción
           <input id="editSubscriber" type="number" min="0" max="3" required>
           <small>Tier 1 = 1, Tier 2 = 2, Tier 3 = 3.</small>
+        </label>
+        <label>
+          Suma de subs
+          <input id="editSubscriberSum" type="number" min="0" max="1000000" required>
+          <small>Total acumulado de subs anteriores.</small>
         </label>
         <label>
           Subs regaladas
@@ -375,6 +382,7 @@
     const sourceInfo = {
       channel_points: ["Puntos", "channelPointsCount"],
       subscriber: ["Suscripción", "subscriberCount"],
+      subscriber_sum: ["Suma de subs", "subscriberSumCount"],
       gifted_subs: ["Subs regaladas", "giftedSubsCount"],
       bits: ["Bits", "bitsCount"],
       purchase: ["Compras", "purchaseCount"],
@@ -390,13 +398,15 @@
     function updateCouponCountLimit(sourceId, countId) {
       const source = document.getElementById(sourceId).value;
       const input = document.getElementById(countId);
-      input.max = source === "subscriber" ? 3 : 1000000;
+      input.max = ["subscriber", "subscriber_sum"].includes(source) ? 3 : 1000000;
       if (Number(input.value) > Number(input.max)) input.value = input.max;
       if (sourceId === "couponSource") {
         const isBits = source === "bits";
         document.getElementById("quantityLabel").textContent = isBits ? "Cantidad de bits" : "Cantidad de cupones";
         document.getElementById("quantityHelp").textContent = isBits
           ? "Cada 100 bits genera un cupón y el sobrante queda acumulado."
+          : source === "subscriber_sum" ? "Cada sub suma según su nivel: Tier 1 = 1, Tier 2 = 2, Tier 3 = 3. Conserva lo acumulado."
+          : source === "subscriber" ? "Conserva el mayor nivel asignado, sin acumular renovaciones."
           : "La cantidad se suma a los cupones actuales.";
       }
     }
@@ -670,6 +680,7 @@
       document.getElementById("couponEditorParticipant").textContent =
         `${participant.displayName} · ${participant.couponCount} cupón(es) en total`;
       document.getElementById("editChannelPoints").value = Number(participant.channelPointsCount || 0);
+      document.getElementById("editSubscriberSum").value = Number(participant.subscriberSumCount || 0);
       document.getElementById("editSubscriber").value = Number(participant.subscriberCount || 0);
       document.getElementById("editGiftedSubs").value = Number(participant.giftedSubsCount || 0);
       document.getElementById("editBits").value = Number(participant.bitsCount || 0);
@@ -692,6 +703,7 @@
           body: JSON.stringify({
             channel_points: Number(document.getElementById("editChannelPoints").value),
             subscriber: Number(document.getElementById("editSubscriber").value),
+            subscriber_sum: Number(document.getElementById("editSubscriberSum").value),
             gifted_subs: Number(document.getElementById("editGiftedSubs").value),
             bits: Number(document.getElementById("editBits").value),
             purchase: Number(document.getElementById("editPurchases").value),
@@ -826,7 +838,7 @@
         sourceParticipants.forEach(item => {
           const key = item.username.replace(/^@/, "").toLowerCase();
           const existing = participantMap.get(key);
-          const itemCouponCount = source === "subscriber" && item.subscriptionTier
+          const itemCouponCount = ["subscriber", "subscriber_sum"].includes(source) && item.subscriptionTier
             ? item.subscriptionTier
             : couponCount;
           if (!existing) {
@@ -837,7 +849,9 @@
             existing.couponCount = Math.max(existing.couponCount, itemCouponCount);
           }
         });
-        const uniqueParticipants = Array.from(participantMap.values());
+        const uniqueParticipants = source === "subscriber_sum"
+          ? sourceParticipants.map(item => ({ ...item, platform, source, couponCount: item.subscriptionTier || couponCount }))
+          : Array.from(participantMap.values());
 
         if (!uniqueParticipants.length) throw new Error("No se encontraron participantes en la lista.");
         bulkStatusEl.textContent = `Importando ${uniqueParticipants.length} participante(s)…`;

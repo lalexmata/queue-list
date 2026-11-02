@@ -1,12 +1,13 @@
 const { pool } = require("../database/db");
 const { findOrCreateCommunityProfile } = require("./community-profile.service");
 
-const SOURCES = ["channel_points", "subscriber", "gifted_subs", "bits", "purchase"];
+const SOURCES = ["channel_points", "subscriber", "subscriber_sum", "gifted_subs", "bits", "purchase"];
 const PARTICIPANT_COLUMNS = `
   p.id, p.profile_id AS "profileId", p.giveaway_id AS "giveawayId", p.username, p.display_name AS "displayName", p.platform,
   COALESCE(SUM(s.coupon_count), 0)::int AS "couponCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'channel_points'), 0)::int AS "channelPointsCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'subscriber'), 0)::int AS "subscriberCount",
+  COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'subscriber_sum'), 0)::int AS "subscriberSumCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'gifted_subs'), 0)::int AS "giftedSubsCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'bits'), 0)::int AS "bitsCount",
   COALESCE(MAX(s.coupon_count) FILTER (WHERE s.source = 'purchase'), 0)::int AS "purchaseCount",
@@ -191,6 +192,7 @@ async function findParticipantByUsername(rawUsername, rawPlatform = "twitch") {
             COALESCE(SUM(s.coupon_count), 0)::int AS "couponCount",
             COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'channel_points'), 0)::int AS "channelPointsCount",
             COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'subscriber'), 0)::int AS "subscriberCount",
+  COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'subscriber_sum'), 0)::int AS "subscriberSumCount",
             COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'gifted_subs'), 0)::int AS "giftedSubsCount",
             COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'bits'), 0)::int AS "bitsCount",
             COALESCE(SUM(s.coupon_count) FILTER (WHERE s.source = 'purchase'), 0)::int AS "purchaseCount",
@@ -225,6 +227,7 @@ async function setGiveawayActive(isActive) {
 
 async function upsertCoupons(db, rawParticipant, selectedGiveawayId = null) {
   const item = normalizeParticipant(rawParticipant);
+  if (item.source === "subscriber_sum" && item.couponCount > 3) throw fail("subscriber_coupon_limit");
   const giveawayId = selectedGiveawayId || await getActiveGiveawayId(db);
   const profileId = await findOrCreateCommunityProfile(db, {
     platform: item.platform, userId: item.username, displayName: item.displayName,
@@ -427,6 +430,7 @@ async function setSourceCount(id, source, couponCount) {
 async function setSourceCounts(id, counts) {
   const normalized = {};
   for (const source of SOURCES) {
+    if (source === "subscriber_sum" && counts?.[source] === undefined) continue;
     normalized[source] = validateCouponCount(counts?.[source], { allowZero: true });
   }
   if (normalized.subscriber > 3) throw fail("subscriber_coupon_limit");
@@ -436,7 +440,7 @@ async function setSourceCounts(id, counts) {
   }
   return inTransaction(async client => {
     if (!await getParticipant(client, id)) return null;
-    for (const source of SOURCES) {
+    for (const source of Object.keys(normalized)) {
       await client.query(
         `INSERT INTO giveaway_coupon_sources (participant_id, source, coupon_count)
          VALUES ($1::bigint, $2::text, $3::integer)
